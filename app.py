@@ -32,25 +32,19 @@ def home():
     tafsir_data = {}  # يمكنك تعبئتها لاحقاً
 
     # تصفية البيانات حسب الكلمة المفتاحية
-    filtered_data = []
     if keyword:
-        for item in quran_data:
-            if keyword in item.get('text', ''):
-                filtered_data.append(item)
+        filtered_data = [item for item in quran_data if keyword in item.get('text', '')]
     else:
         filtered_data = quran_data
 
-    # حساب عدد الصفحات (نفترض 10 آيات لكل صفحة)
+    # حساب عدد الصفحات (إذا كانت البيانات فارغة، اجعل الصفحة = 1)
     per_page = 10
     total_items = len(filtered_data)
-    total_pages = math.ceil(total_items / per_page) if total_items > 0 else 1
+    total_pages = max(1, math.ceil(total_items / per_page))  # على الأقل صفحة واحدة
 
     # الصفحة الحالية
-    page = int(request.args.get('page', 1))
-    if page < 1:
-        page = 1
-    if page > total_pages:
-        page = total_pages
+    page = request.args.get('page', 1, type=int)
+    page = max(1, min(page, total_pages))
 
     start = (page - 1) * per_page
     end = start + per_page
