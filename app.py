@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request
 import json
 import os
+import math
 
 app = Flask(__name__)
 
@@ -28,12 +29,40 @@ def highlight_filter(text, keyword):
 def home():
     keyword = request.args.get('q', '')
     prayer_data = {'city': 'غير محدد', 'country': 'غير محدد'}
-    tafsir_data = {}  # يمكنك إضافة {'error': 'لا توجد بيانات تفسير'} حسب الحاجة
-    return render_template('index.html', 
-                           quran=quran_data, 
-                           keyword=keyword, 
+    tafsir_data = {}  # يمكنك تعبئتها لاحقاً
+
+    # تصفية البيانات حسب الكلمة المفتاحية
+    filtered_data = []
+    if keyword:
+        for item in quran_data:
+            if keyword in item.get('text', ''):
+                filtered_data.append(item)
+    else:
+        filtered_data = quran_data
+
+    # حساب عدد الصفحات (نفترض 10 آيات لكل صفحة)
+    per_page = 10
+    total_items = len(filtered_data)
+    total_pages = math.ceil(total_items / per_page) if total_items > 0 else 1
+
+    # الصفحة الحالية
+    page = int(request.args.get('page', 1))
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_data = filtered_data[start:end]
+
+    return render_template('index.html',
+                           quran=paginated_data,
+                           keyword=keyword,
                            prayer_data=prayer_data,
-                           tafsir_data=tafsir_data)
+                           tafsir_data=tafsir_data,
+                           total_pages=total_pages,
+                           current_page=page)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
