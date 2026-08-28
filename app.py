@@ -6,10 +6,15 @@ app = Flask(__name__)
 
 def load_quran_data():
     json_path = os.path.join(os.path.dirname(__file__), 'quran.json')
-    if os.path.exists(json_path):
+    if not os.path.exists(json_path):
+        print("⚠️ ملف quran.json غير موجود، سيتم استخدام بيانات فارغة.")
+        return []
+    try:
         with open(json_path, 'r', encoding='utf-8') as f:
             return json.load(f)
-    return []
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"❌ خطأ في قراءة ملف quran.json: {e}")
+        return []
 
 quran_data = load_quran_data()
 
@@ -22,9 +27,14 @@ def highlight_filter(text, keyword):
 @app.route('/')
 def home():
     keyword = request.args.get('q', '')
-    # تعريف متغير افتراضي لتلافي خطأ prayer_data is undefined
-    prayer_data = {'city': '', 'country': ''}
-    return render_template('index.html', quran=quran_data, keyword=keyword, prayer_data=prayer_data)
+    prayer_data = {'city': 'غير محدد', 'country': 'غير محدد'}
+    tafsir_data = {}  # يمكنك إضافة {'error': 'لا توجد بيانات تفسير'} حسب الحاجة
+    return render_template('index.html', 
+                           quran=quran_data, 
+                           keyword=keyword, 
+                           prayer_data=prayer_data,
+                           tafsir_data=tafsir_data)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
