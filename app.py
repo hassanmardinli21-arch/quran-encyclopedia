@@ -22,7 +22,9 @@ def highlight_filter(text, keyword):
 @app.route('/')
 def home():
     keyword = request.args.get('q', '')
-    return render_template('index.html', quran=quran_data, keyword=keyword)
+    # تعريف متغير افتراضي لتلافي خطأ prayer_data is undefined
+    prayer_data = {'city': '', 'country': ''}
+    return render_template('index.html', quran=quran_data, keyword=keyword, prayer_data=prayer_data)
 
 if __name__ == '__main__':
     app.run(debug=True)
