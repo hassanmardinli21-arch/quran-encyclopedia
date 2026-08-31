@@ -1,13 +1,32 @@
 let quranData = [];
 
-// جلب بيانات ملف quran.json عند فتح الصفحة
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const response = await fetch('quran.json');
-        quranData = await response.json();
+        const data = await response.json();
+        
+        // استخراج كل الآيات من جميع السور
+        quranData = [];
+        data.forEach(surah => {
+            if (surah.ayahs && Array.isArray(surah.ayahs)) {
+                surah.ayahs.forEach(ayah => {
+                    quranData.push({
+                        surah: surah.name,
+                        number: ayah.number,
+                        text: ayah.text,
+                        numberInSurah: ayah.numberInSurah
+                    });
+                });
+            }
+        });
+        
         displayData(quranData);
     } catch (error) {
-        document.getElementById('quranContainer').innerHTML = '<p style="color:red; text-align:center;">عذراً، حدث خطأ أثناء تحميل بيانات الموسوعة.</p>';
+        document.getElementById('quranContainer').innerHTML = `
+            <div class="error-message">
+                عذراً، حدث خطأ أثناء تحميل بيانات الموسوعة.
+            </div>
+        `;
         console.error('Error loading JSON:', error);
     }
 
@@ -21,19 +40,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 function displayData(items) {
     const container = document.getElementById('quranContainer');
     const countDiv = document.getElementById('resultsCount');
-    
+
     if (items.length === 0) {
-        container.innerHTML = '<p style="text-align:center; color:#777;">لا توجد نتائج مطابقة للبحث.</p>';
+        container.innerHTML = '<div class="no-results">لا توجد نتائج مطابقة للبحث.</div>';
         countDiv.textContent = 'عدد النتائج: 0';
         return;
     }
 
     countDiv.textContent = `عدد النتائج: ${items.length}`;
     
-    // عرض عينة أو النتائج (يمكن تحديد عدد العرض إذا كانت البيانات ضخمة جداً لتحسين الأداء)
+    // عرض النتائج (حد أقصى 100 لتحسين الأداء)
     container.innerHTML = items.slice(0, 100).map(item => `
         <div class="quran-item">
             <p>${highlightText(item.text || '', document.getElementById('searchInput').value)}</p>
+            <span class="ayah-info">${item.surah} - آية ${item.numberInSurah}</span>
         </div>
     `).join('');
 }
@@ -43,7 +63,9 @@ function filterData(query) {
         displayData(quranData);
         return;
     }
-    const filtered = quranData.filter(item => item.text && item.text.includes(query));
+    const filtered = quranData.filter(item => 
+        item.text && item.text.includes(query)
+    );
     displayData(filtered);
 }
 
