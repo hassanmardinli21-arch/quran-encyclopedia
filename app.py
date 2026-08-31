@@ -1,224 +1,160 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, render_template_string, request, jsonify
 import json
-import os
-import math
 
 app = Flask(__name__)
 
-# ============================
-# تحميل البيانات من ملفات JSON
-# ============================
+# ----------------- 1. تحميل الملفات (تم تعديل المسار) -----------------
+QURAN_PATH = 'data/quran.json'
 
-def load_json_file(filename):
-    path = os.path.join(os.path.dirname(__file__), 'data', filename)
-    if not os.path.exists(path):
-        return None
-    with open(path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+# ✅ تم وضع المسار الصحيح مع حرف r لتفادي مشاكل ويندوز
+TAFSIR_PATH = r'F:\تطبيقات صنعي\الموسوعة_الإسلامية\data\tafsir_saadi.json'
 
-# تحميل القرآن
-quran_data = load_json_file('quran.json') or []
+BUKHARI_PATH = 'data/bukhari_hadiths.json'
 
-# تحميل تفسير السعدي
-tafsir_raw = load_json_file('tafsir_saadi.json') or {}
-tafsir_ayahs = tafsir_raw.get('ayahs', [])
-tafsir_name = tafsir_raw.get('name', 'تفسير السعدي')
-tafsir_surah_name = tafsir_raw.get('surah_name', 'الفاتحة')
+# دالة لتحميل ملف JSON بأمان
+def load_json(filepath):
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"تحذير: لم يتم العثور على الملف {filepath}")
+        return []
+    except Exception as e:
+        print(f"خطأ في قراءة {filepath}: {e}")
+        return []
 
-# ============================
-# أسماء السور
-# ============================
+# تحميل البيانات في الذاكرة عند تشغيل السيرفر
+quran_data = load_json(QURAN_PATH)
+tafsir_list = load_json(TAFSIR_PATH)
+bukhari_data = load_json(BUKHARI_PATH)
 
-SURAH_NAMES = [
-    "الفاتحة", "البقرة", "آل عمران", "النساء", "المائدة", "الأنعام",
-    "الأعراف", "الأنفال", "التوبة", "يونس", "هود", "يوسف", "الرعد",
-    "إبراهيم", "الحجر", "النحل", "الإسراء", "الكهف", "مريم", "طه",
-    "الأنبياء", "الحج", "المؤمنون", "النور", "الفرقان", "الشعراء",
-    "النمل", "القصص", "العنكبوت", "الروم", "لقمان", "السجدة",
-    "الأحزاب", "سبأ", "فاطر", "يس", "الصافات", "ص", "الزمر",
-    "غافر", "فصلت", "الشورى", "الزخرف", "الدخان", "الجاثية",
-    "الأحقاف", "محمد", "الفتح", "الحجرات", "ق", "الذاريات",
-    "الطور", "النجم", "القمر", "الرحمن", "الواقعة", "الحديد",
-    "المجادلة", "الحشر", "الممتحنة", "الصف", "الجمعة", "المنافقون",
-    "التغابن", "الطلاق", "التحريم", "الملك", "القلم", "الحاقة",
-    "المعارج", "نوح", "الجن", "المزمل", "المدثر", "القيامة",
-    "الإنسان", "المرسلات", "النبأ", "النازعات", "عبس", "التكوير",
-    "الانفطار", "المطففين", "الانشقاق", "البروج", "الطارق",
-    "الأعلى", "الغاشية", "الفجر", "البلد", "الشمس", "الليل",
-    "الضحى", "الشرح", "التين", "العلق", "القدر", "البينة",
-    "الزلزلة", "العاديات", "القارعة", "التكاثر", "العصر",
-    "الهمزة", "الفيل", "قريش", "الماعون", "الكوثر", "الكافرون",
-    "النصر", "المسد", "الإخلاص", "الفلق", "الناس"
-]
+# تحويل قائمة التفسير إلى قاموس للوصول السريع
+tafsir_map = {}
+for item in tafsir_list:
+    key = (item.get('surah'), item.get('ayah'))
+    tafsir_map[key] = item.get('text', 'لا يوجد نص تفسير')
 
-# ============================
-# فلتر التمييز
-# ============================
+# ----------------- 2. منطق البحث والربط -----------------
+def get_tafsir(surah_num, ayah_num):
+    if not surah_num or not ayah_num:
+        return ""
+    return tafsir_map.get((int(surah_num), int(ayah_num)), "لا يوجد تفسير مسجل لهذه الآية حالياً.")
 
-@app.template_filter('highlight')
-def highlight_filter(text, keyword):
-    if not keyword or not text:
-        return text
-    return text.replace(keyword, f'<mark>{keyword}</mark>')
-
-# ============================
-# الصفحة الرئيسية
-# ============================
+# ----------------- 3. المسارات (Routes) -----------------
 
 @app.route('/')
-def home():
-    # عرض أول 10 آيات من القرآن (إذا كان موجوداً) وإلا من التفسير
-    sample = quran_data[:10] if quran_data else tafsir_ayahs[:10]
-    
-    # إضافة اسم السورة
-    for item in sample:
-        surah_num = item.get('surah', 1)
-        if 1 <= surah_num <= len(SURAH_NAMES):
-            item['surah_name'] = SURAH_NAMES[surah_num - 1]
+def index():
+    # ✅ تم إصلاح الاستيراد ليعمل هذا السطر
+    return render_template_string(HTML_TEMPLATE)
 
-    return render_template('index.html',
-        quran=[],
-        keyword='',
-        prayer_data={
-            'city': 'مكة المكرمة',
-            'country': 'السعودية',
-            'date': '31 أغسطس 2026',
-            'hijri': '18 صفر 1448',
-            'timings': {
-                'Fajr': '04:30', 'Sunrise': '06:00', 'Dhuhr': '12:15',
-                'Asr': '15:45', 'Maghrib': '18:30', 'Isha': '20:00'
-            }
-        },
-        tafsir_data={
-            'error': None,
-            'surah_name': 'الفاتحة',
-            'name': tafsir_name,
-            'ayahs': sample
-        },
-        surahs_names=SURAH_NAMES,
-        source='quran',
-        current_surah=1,
-        page=1,
-        total_pages=max(1, math.ceil(len(sample) / 10)),
-        word_abjad=0
-    )
-
-# ============================
-# صفحة البحث
-# ============================
-
-@app.route('/search')
+@app.route('/search', methods=['GET'])
 def search():
-    keyword = request.args.get('keyword', '').strip()
-    source = request.args.get('source', 'quran')
-    surah = request.args.get('surah', 'all')
-    page = request.args.get('page', 1, type=int)
+    book = request.args.get('book', 'quran').lower()
+    query = request.args.get('query', '').strip()
+    surah = request.args.get('surah', type=int)
+    
+    results = []
 
-    # اختيار مصدر البيانات
-    if source == 'quran':
-        filtered = quran_data
-        source_name = 'القرآن الكريم'
-    else:
-        filtered = tafsir_ayahs
-        source_name = tafsir_name
+    if book == 'quran':
+        # ✅ تم تعديل منطق البحث ليتوافق مع ملف quran.json الذي أرسلته (قائمة مسطحة)
+        if surah:
+            for item in quran_data:
+                if item.get('surah') == surah:
+                    ayah_num = item.get('ayah')
+                    results.append({
+                        'type': 'quran',
+                        'surah': surah,
+                        'ayah': ayah_num,
+                        'text': item.get('text', ''),
+                        'tafsir': get_tafsir(surah, ayah_num)
+                    })
+                
+    elif book == 'bukhari':
+        if query:
+            count = 0
+            for hadith in bukhari_data:
+                if query in hadith.get('text', ''):
+                    results.append({
+                        'type': 'hadith',
+                        'book': 'صحيح البخاري',
+                        'text': hadith.get('text', ''),
+                        'value': hadith.get('value', '')
+                    })
+                    count += 1
+                    if count >= 10:
+                        break
+    
+    return jsonify(results)
 
-    # تصفية حسب السورة
-    if surah and surah != 'all':
-        try:
-            surah_num = int(surah)
-            filtered = [item for item in filtered if item.get('surah') == surah_num]
-        except:
-            pass
+# ----------------- 4. واجهة المستخدم (HTML) -----------------
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>المكتبة القرآنية والتفاسير</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; text-align: center; padding: 20px; }
+        .container { background: white; padding: 20px; border-radius: 8px; max-width: 800px; margin: 0 auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        select, input, button { padding: 10px; margin: 5px; font-size: 16px; }
+        .result { border: 1px solid #ddd; margin-top: 20px; padding: 15px; text-align: right; }
+        .tafsir { background-color: #f9f9f9; border-top: 2px solid #28a745; margin-top: 10px; padding: 10px; color: #333; }
+        .hadith-box { border: 1px solid #007bff; background: #e9f7ff; padding: 10px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>المكتبة القرآنية والتفاسير</h1>
+    <div class="container">
+        <select id="book">
+            <option value="quran">القرآن الكريم</option>
+            <option value="bukhari">صحيح البخاري</option>
+        </select>
+        
+        <select id="surah">
+            <option value="1">الفائحة</option>
+            <option value="2">البقرة</option>
+        </select>
+        
+        <input type="text" id="query" placeholder="ابحث عن كلمة أو آية...">
+        <button onclick="doSearch()">بحث</button>
+        
+        <div id="results"></div>
+    </div>
 
-    # تصفية حسب الكلمة المفتاحية
-    if keyword:
-        filtered = [item for item in filtered if keyword in item.get('text', '')]
-
-    # الترقيم
-    per_page = 10
-    total_items = len(filtered)
-    total_pages = max(1, math.ceil(total_items / per_page))
-    page = max(1, min(page, total_pages))
-    start = (page - 1) * per_page
-    end = start + per_page
-    paginated = filtered[start:end]
-
-    # إضافة اسم السورة
-    for item in paginated:
-        surah_num = item.get('surah', 1)
-        if 1 <= surah_num <= len(SURAH_NAMES):
-            item['surah_name'] = SURAH_NAMES[surah_num - 1]
-
-    tafsir_data = {
-        'error': None,
-        'surah_name': f'سورة {SURAH_NAMES[surah_num-1] if surah != "all" else "جميع السور"}',
-        'name': source_name,
-        'ayahs': paginated,
-        'total_pages': total_pages,
-        'current_page': page
-    }
-
-    return render_template('index.html',
-        quran=[],
-        keyword=keyword,
-        prayer_data={
-            'city': 'مكة المكرمة',
-            'country': 'السعودية',
-            'date': '31 أغسطس 2026',
-            'hijri': '18 صفر 1448',
-            'timings': {
-                'Fajr': '04:30', 'Sunrise': '06:00', 'Dhuhr': '12:15',
-                'Asr': '15:45', 'Maghrib': '18:30', 'Isha': '20:00'
-            }
-        },
-        tafsir_data=tafsir_data,
-        surahs_names=SURAH_NAMES,
-        source=source,
-        current_surah=int(surah) if surah.isdigit() else 1,
-        page=page,
-        total_pages=total_pages,
-        word_abjad=0
-    )
-
-# ============================
-# صفحات إضافية
-# ============================
-
-@app.route('/read')
-def read():
-    return render_template('index.html', **get_default_context())
-
-@app.route('/about')
-def about():
-    return render_template('index.html', **get_default_context())
-
-@app.route('/export')
-def export():
-    return "وظيفة التصدير قيد التطوير"
-
-def get_default_context():
-    return {
-        'quran': [],
-        'keyword': '',
-        'prayer_data': {
-            'city': 'مكة المكرمة',
-            'country': 'السعودية',
-            'date': '31 أغسطس 2026',
-            'hijri': '18 صفر 1448',
-            'timings': {
-                'Fajr': '04:30', 'Sunrise': '06:00', 'Dhuhr': '12:15',
-                'Asr': '15:45', 'Maghrib': '18:30', 'Isha': '20:00'
-            }
-        },
-        'tafsir_data': {'error': None, 'surah_name': 'الفاتحة', 'name': 'تفسير السعدي', 'ayahs': []},
-        'surahs_names': SURAH_NAMES,
-        'source': 'quran',
-        'current_surah': 1,
-        'page': 1,
-        'total_pages': 1,
-        'word_abjad': 0
-    }
+    <script>
+        async function doSearch() {
+            const book = document.getElementById('book').value;
+            const query = document.getElementById('query').value;
+            const surah = document.getElementById('surah').value;
+            
+            const response = await fetch(`/search?book=${book}&query=${query}&surah=${surah}`);
+            const data = await response.json();
+            
+            let html = '';
+            data.forEach(item => {
+                if (item.type === 'quran') {
+                    html += `<div class="result">
+                                <strong>سورة ${item.surah} آية ${item.ayah}:</strong><br>
+                                <p>${item.text}</p>
+                                <div class="tafsir">
+                                    <strong>التفسير:</strong><br>
+                                    ${item.tafsir}
+                                </div>
+                             </div>`;
+                } else if (item.type === 'hadith') {
+                    html += `<div class="result hadith-box">
+                                <strong>${item.book}</strong><br>
+                                ${item.text}
+                             </div>`;
+                }
+            });
+            
+            document.getElementById('results').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
+"""
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(debug=True, port=5000)
