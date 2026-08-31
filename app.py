@@ -10,49 +10,20 @@ app = Flask(__name__)
 # ============================
 
 def load_json_file(filename):
-    """تحميل ملف JSON من مجلد data"""
     path = os.path.join(os.path.dirname(__file__), 'data', filename)
     if not os.path.exists(path):
-        print(f"⚠️ الملف {filename} غير موجود في المسار: {path}")
         return None
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"❌ خطأ في قراءة {filename}: {e}")
-        return None
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 # تحميل القرآن
-quran_raw = load_json_file('quran.json')
-
-# تحويل القرآن إلى قائمة موحدة من الآيات
-if isinstance(quran_raw, list):
-    quran_data = quran_raw
-elif isinstance(quran_raw, dict) and 'ayahs' in quran_raw:
-    quran_data = quran_raw['ayahs']
-else:
-    quran_data = []
-
-print(f"✅ تم تحميل {len(quran_data)} آية من القرآن")
+quran_data = load_json_file('quran.json') or []
 
 # تحميل تفسير السعدي
-tafsir_raw = load_json_file('tafsir_saadi.json')
-
-# تحويل التفسير إلى قائمة موحدة من الآيات
-if isinstance(tafsir_raw, list):
-    tafsir_ayahs = tafsir_raw
-    tafsir_name = 'تفسير السعدي'
-    tafsir_surah_name = 'الفاتحة'
-elif isinstance(tafsir_raw, dict) and 'ayahs' in tafsir_raw:
-    tafsir_ayahs = tafsir_raw['ayahs']
-    tafsir_name = tafsir_raw.get('name', 'تفسير السعدي')
-    tafsir_surah_name = tafsir_raw.get('surah_name', 'الفاتحة')
-else:
-    tafsir_ayahs = []
-    tafsir_name = 'تفسير السعدي'
-    tafsir_surah_name = 'الفاتحة'
-
-print(f"✅ تم تحميل {len(tafsir_ayahs)} آية من تفسير السعدي")
+tafsir_raw = load_json_file('tafsir_saadi.json') or {}
+tafsir_ayahs = tafsir_raw.get('ayahs', [])
+tafsir_name = tafsir_raw.get('name', 'تفسير السعدي')
+tafsir_surah_name = tafsir_raw.get('surah_name', 'الفاتحة')
 
 # ============================
 # أسماء السور
@@ -96,13 +67,10 @@ def highlight_filter(text, keyword):
 
 @app.route('/')
 def home():
-    # إذا كان القرآن فارغاً، استخدم التفسير لعرض شيء
-    if quran_data:
-        sample = quran_data[:10]
-    else:
-        sample = tafsir_ayahs[:10] if tafsir_ayahs else []
-
-    # إضافة اسم السورة لكل آية
+    # عرض أول 10 آيات من القرآن (إذا كان موجوداً) وإلا من التفسير
+    sample = quran_data[:10] if quran_data else tafsir_ayahs[:10]
+    
+    # إضافة اسم السورة
     for item in sample:
         surah_num = item.get('surah', 1)
         if 1 <= surah_num <= len(SURAH_NAMES):
