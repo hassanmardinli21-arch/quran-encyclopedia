@@ -5,22 +5,53 @@ import math
 
 app = Flask(__name__)
 
-# ========== تحميل بيانات القرآن (إن وجدت) ==========
-def load_quran_data():
-    json_path = os.path.join(os.path.dirname(__file__), 'quran.json')
-    if not os.path.exists(json_path):
-        print("⚠️ ملف quran.json غير موجود، سيتم استخدام بيانات فارغة.")
-        return []
+# ============================================
+# دالة ذكية للبحث عن الملفات في عدة مسارات
+# ============================================
+def find_file(filename):
+    """تبحث عن الملف في مجلد data بمسارات مختلفة وتطبع المسار الفعلي"""
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), 'data', filename),
+        os.path.join(os.getcwd(), 'data', filename),
+        os.path.join(os.getcwd(), filename),
+        os.path.join(os.path.dirname(__file__), filename),
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"✅ تم العثور على {filename} في: {path}")
+            return path
+    print(f"❌ لم يتم العثور على {filename} في أي من المسارات التالية:")
+    for p in possible_paths:
+        print(f"   - {p}")
+    return None
+
+def load_json_file(filename):
+    path = find_file(filename)
+    if path is None:
+        return None
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"❌ خطأ في قراءة ملف quran.json: {e}")
-        return []
+    except Exception as e:
+        print(f"❌ خطأ في قراءة {filename}: {e}")
+        return None
 
-quran_data = load_quran_data()
+# ============================================
+# تحميل البيانات
+# ============================================
+quran_data = load_json_file('quran.json') or []
+tafsir_raw = load_json_file('tafsir_saadi.json')
 
-# ========== قائمة أسماء السور (114 سورة) ==========
+# معالجة بيانات التفسير (إذا كانت قائمة أو كائن)
+tafsir_ayahs = []
+if isinstance(tafsir_raw, list):
+    tafsir_ayahs = tafsir_raw
+elif isinstance(tafsir_raw, dict) and 'ayahs' in tafsir_raw:
+    tafsir_ayahs = tafsir_raw['ayahs']
+
+# ============================================
+# أسماء السور
+# ============================================
 SURAH_NAMES = [
     "الفاتحة", "البقرة", "آل عمران", "النساء", "المائدة", "الأنعام",
     "الأعراف", "الأنفال", "التوبة", "يونس", "هود", "يوسف", "الرعد",
@@ -43,19 +74,31 @@ SURAH_NAMES = [
     "النصر", "المسد", "الإخلاص", "الفلق", "الناس"
 ]
 
-# ========== فلتر التمييز ==========
+# ============================================
+# فلتر التمييز
+# ============================================
 @app.template_filter('highlight')
 def highlight_filter(text, keyword):
     if not keyword or not text:
         return text
     return text.replace(keyword, f'<mark>{keyword}</mark>')
 
-# ========== الصفحة الرئيسية ==========
+# ============================================
+# الصفحة الرئيسية
+# ============================================
 @app.route('/')
 def home():
-    # جميع المتغيرات التي يحتاجها القالب
+    # عرض أول 10 آيات من القرآن
+    sample = quran_data[:10] if quran_data else []
+    for item in sample:
+        surah_num = item.get('surah', 1)
+        if 1 <= surah_num <= len(SURAH_NAMES):
+            item['surah_name'] = SURAH_NAMES[surah_num - 1]
+
+    tafsir_sample = tafsir_ayahs[:10] if tafsir_ayahs else []
+
     return render_template('index.html',
-        quran=[],  # سيتم عرض البيانات عبر tafsir_data
+        quran=[],
         keyword='',
         prayer_data={
             'city': 'مكة المكرمة',
@@ -63,29 +106,27 @@ def home():
             'date': '28 أغسطس 2026',
             'hijri': '15 صفر 1448',
             'timings': {
-                'Fajr': '04:30',
-                'Sunrise': '06:00',
-                'Dhuhr': '12:15',
-                'Asr': '15:45',
-                'Maghrib': '18:30',
-                'Isha': '20:00'
+                'Fajr': '04:30', 'Sunrise': '06:00', 'Dhuhr': '12:15',
+                'Asr': '15:45', 'Maghrib': '18:30', 'Isha': '20:00'
             }
         },
         tafsir_data={
             'error': None,
             'surah_name': 'الفاتحة',
             'name': 'تفسير السعدي',
-            'ayahs': []  # فارغ حالياً
+            'ayahs': tafsir_sample if tafsir_sample else sample
         },
         surahs_names=SURAH_NAMES,
         source='quran',
         current_surah=1,
         page=1,
-        total_pages=1,
+        total_pages=math.ceil(len(quran_data) / 10) if quran_data else 1,
         word_abjad=0
     )
 
-# ========== صفحة البحث ==========
+# ============================================
+# صفحة البحث
+# ============================================
 @app.route('/search')
 def search():
     keyword = request.args.get('keyword', '').strip()
@@ -93,8 +134,64 @@ def search():
     surah = request.args.get('surah', 'all')
     page = request.args.get('page', 1, type=int)
 
-    # محاكاة البحث (يمكنك تطويرها لاحقاً)
-    # نمرر جميع المتغيرات مع قيم افتراضية
+    if source == 'quran':
+        filtered = quran_data
+        if surah and surah != 'all':
+            try:
+                surah_num = int(surah)
+                filtered = [item for item in filtered if item.get('surah') == surah_num]
+            except:
+                pass
+        if keyword:
+            filtered = [item for item in filtered if keyword in item.get('text', '')]
+        
+        per_page = 10
+        total_items = len(filtered)
+        total_pages = max(1, math.ceil(total_items / per_page))
+        page = max(1, min(page, total_pages))
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated = filtered[start:end]
+
+        for item in paginated:
+            surah_num = item.get('surah', 1)
+            if 1 <= surah_num <= len(SURAH_NAMES):
+                item['surah_name'] = SURAH_NAMES[surah_num - 1]
+
+        tafsir_data = {
+            'error': None,
+            'surah_name': f'سورة {SURAH_NAMES[surah_num-1] if surah != "all" else "جميع السور"}',
+            'name': 'القرآن الكريم',
+            'ayahs': paginated,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+    else:
+        filtered = tafsir_ayahs
+        if keyword:
+            filtered = [item for item in filtered if keyword in item.get('text', '')]
+        per_page = 10
+        total_items = len(filtered)
+        total_pages = max(1, math.ceil(total_items / per_page))
+        page = max(1, min(page, total_pages))
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated = filtered[start:end]
+
+        for item in paginated:
+            surah_num = item.get('surah', 1)
+            if 1 <= surah_num <= len(SURAH_NAMES):
+                item['surah_name'] = SURAH_NAMES[surah_num - 1]
+
+        tafsir_data = {
+            'error': None,
+            'surah_name': 'تفسير السعدي',
+            'name': 'تفسير السعدي',
+            'ayahs': paginated,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
     return render_template('index.html',
         quran=[],
         keyword=keyword,
@@ -104,29 +201,22 @@ def search():
             'date': '28 أغسطس 2026',
             'hijri': '15 صفر 1448',
             'timings': {
-                'Fajr': '04:30',
-                'Sunrise': '06:00',
-                'Dhuhr': '12:15',
-                'Asr': '15:45',
-                'Maghrib': '18:30',
-                'Isha': '20:00'
+                'Fajr': '04:30', 'Sunrise': '06:00', 'Dhuhr': '12:15',
+                'Asr': '15:45', 'Maghrib': '18:30', 'Isha': '20:00'
             }
         },
-        tafsir_data={
-            'error': None,
-            'surah_name': 'البقرة' if surah != 'all' else 'الفاتحة',
-            'name': 'تفسير السعدي',
-            'ayahs': []  # يمكنك ملؤها من بيانات القرآن الحقيقية
-        },
+        tafsir_data=tafsir_data,
         surahs_names=SURAH_NAMES,
         source=source,
         current_surah=int(surah) if surah.isdigit() else 1,
         page=page,
-        total_pages=1,
+        total_pages=tafsir_data.get('total_pages', 1),
         word_abjad=0
     )
 
-# ========== صفحات إضافية (لتجنب 404) ==========
+# ============================================
+# صفحات إضافية
+# ============================================
 @app.route('/read')
 def read():
     return render_template('index.html', **get_default_context())
@@ -137,7 +227,6 @@ def about():
 
 @app.route('/export')
 def export():
-    # تصدير (يمكن تطويره)
     return "وظيفة التصدير قيد التطوير"
 
 def get_default_context():
@@ -150,12 +239,8 @@ def get_default_context():
             'date': '28 أغسطس 2026',
             'hijri': '15 صفر 1448',
             'timings': {
-                'Fajr': '04:30',
-                'Sunrise': '06:00',
-                'Dhuhr': '12:15',
-                'Asr': '15:45',
-                'Maghrib': '18:30',
-                'Isha': '20:00'
+                'Fajr': '04:30', 'Sunrise': '06:00', 'Dhuhr': '12:15',
+                'Asr': '15:45', 'Maghrib': '18:30', 'Isha': '20:00'
             }
         },
         'tafsir_data': {'error': None, 'surah_name': 'الفاتحة', 'name': 'تفسير السعدي', 'ayahs': []},
