@@ -1,0 +1,67 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+body {
+    font-family: 'Tahoma', Arial, sans-serif;
+    background-color: #f9f9f9;
+    color: #333;
+    line-height: 1.8;
+    padding: 20px;
+}
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+header {
+    text-align: center;
+    margin-bottom: 25px;
+}
+header h1 {
+    color: #1b5e20;
+    margin-bottom: 15px;
+}
+.search-box input {
+    width: 100%;
+    padding: 12px 18px;
+    font-size: 16px;
+    border: 2px solid #c8e6c9;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.3s;
+}
+.search-box input:focus {
+    border-color: #2e7d32;
+}
+.results-count {
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: #666;
+}
+.quran-item {
+    padding: 15px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #eee;
+    background: #fff;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+.quran-item:hover {
+    background: #f1f8e9;
+}
+mark {
+    background-color: #fff176;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+.loading {
+    text-align: center;
+    color: #666;
+    font-size: 18px;
+    padding: 40px;
+}
