@@ -17,6 +17,21 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / 'data'
 HADITH_DIR = DATA_DIR / 'hadith'
 
+
+def find_file(filename):
+    """البحث عن ملف في جميع المسارات المحتملة"""
+    candidates = [
+        BASE_DIR / filename,
+        DATA_DIR / filename,
+        HADITH_DIR / filename,
+        BASE_DIR / 'data' / 'hadith' / filename,
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
+
+
 SURAH_NAMES = [
     "الفاتحة", "البقرة", "آل عمران", "النساء", "المائدة", "الأنعام",
     "الأعراف", "الأنفال", "التوبة", "يونس", "هود", "يوسف", "الرعد",
@@ -115,8 +130,8 @@ def parse_hadith_item(item, index, book_name):
     }
 
 
-def load_hadith_from_json_file(json_path, book_name):
-    data = load_json(json_path)
+def load_hadith_file(path, book_name):
+    data = load_json(path)
     if not data:
         return []
     items = []
@@ -135,10 +150,12 @@ def load_hadith_from_json_file(json_path, book_name):
 print("=" * 60)
 print("📚 تحميل قاعدة البيانات...")
 
-QURAN_DATA = load_json(DATA_DIR / 'quran.json')
-print(f"✅ القرآن: {len(QURAN_DATA)} آية")
+QURAN_PATH = find_file('quran.json')
+QURAN_DATA = load_json(QURAN_PATH) if QURAN_PATH else []
+print(f"✅ القرآن: {len(QURAN_DATA)} آية (من {QURAN_PATH})")
 
-TAFSIR_LIST = load_json(DATA_DIR / 'tafsir_saadi.json')
+TAFSIR_PATH = find_file('tafsir_saadi.json')
+TAFSIR_LIST = load_json(TAFSIR_PATH) if TAFSIR_PATH else []
 TAFSIR_MAP = {}
 for item in TAFSIR_LIST:
     if not isinstance(item, dict):
@@ -149,16 +166,15 @@ print(f"✅ التفسير: {len(TAFSIR_MAP)} مدخل")
 
 HADITH_BOOKS = {}
 
-BUKHARI_JSON = HADITH_DIR / 'bukhari.json'
-MUSLIM_JSON = HADITH_DIR / 'muslim.json'
+BUKHARI_PATH = find_file('bukhari.json')
+if BUKHARI_PATH:
+    HADITH_BOOKS['bukhari'] = load_hadith_file(BUKHARI_PATH, 'صحيح البخاري')
+    print(f"✅ البخاري: {len(HADITH_BOOKS['bukhari'])} حديث (من {BUKHARI_PATH})")
 
-if BUKHARI_JSON.is_file():
-    HADITH_BOOKS['bukhari'] = load_hadith_from_json_file(BUKHARI_JSON, 'صحيح البخاري')
-    print(f"✅ البخاري: {len(HADITH_BOOKS['bukhari'])} حديث")
-
-if MUSLIM_JSON.is_file():
-    HADITH_BOOKS['muslim'] = load_hadith_from_json_file(MUSLIM_JSON, 'صحيح مسلم')
-    print(f"✅ مسلم: {len(HADITH_BOOKS['muslim'])} حديث")
+MUSLIM_PATH = find_file('muslim.json')
+if MUSLIM_PATH:
+    HADITH_BOOKS['muslim'] = load_hadith_file(MUSLIM_PATH, 'صحيح مسلم')
+    print(f"✅ مسلم: {len(HADITH_BOOKS['muslim'])} حديث (من {MUSLIM_PATH})")
 
 print(f"✅ إجمالي الكتب: {len(HADITH_BOOKS)}")
 print("=" * 60)
