@@ -6,7 +6,6 @@ import json
 import os
 import re
 import unicodedata
-import zipfile
 from pathlib import Path
 
 from flask import Flask, render_template, request
@@ -19,7 +18,6 @@ HADITH_DIR = DATA_DIR / 'hadith'
 
 
 def find_file(filename):
-    """البحث عن ملف في جميع المسارات المحتملة"""
     candidates = [
         BASE_DIR / filename,
         DATA_DIR / filename,
@@ -103,6 +101,38 @@ def load_json(path):
         return []
 
 
+def load_quran_flat(path):
+    """يقرأ quran.json بأي تنسيق: مسطح أو متداخل (risan/quran-json)"""
+    data = load_json(path)
+    if not data or not isinstance(data, list):
+        return []
+
+    first = data[0] if data else {}
+    if not isinstance(first, dict):
+        return []
+
+    # التنسيق المتداخل (risan/quran-json): {"id":1, "verses":[...]}
+    if 'verses' in first and 'surah' not in first:
+        flat = []
+        for surah_obj in data:
+            s = surah_obj.get('id')
+            if not s:
+                continue
+            for v in surah_obj.get('verses', []):
+                a = v.get('id')
+                t = v.get('text', '')
+                if a and t:
+                    flat.append({'surah': s, 'ayah': a, 'text': t})
+        print(f"✅ تم فك التنسيق المتداخل: {len(flat)} آية")
+        return flat
+
+    # التنسيق المسطح
+    if 'surah' in first and 'ayah' in first:
+        return data
+
+    return []
+
+
 def parse_hadith_item(item, index, book_name):
     if not isinstance(item, dict):
         return None
@@ -151,8 +181,8 @@ print("=" * 60)
 print("📚 تحميل قاعدة البيانات...")
 
 QURAN_PATH = find_file('quran.json')
-QURAN_DATA = load_json(QURAN_PATH) if QURAN_PATH else []
-print(f"✅ القرآن: {len(QURAN_DATA)} آية (من {QURAN_PATH})")
+QURAN_DATA = load_quran_flat(QURAN_PATH) if QURAN_PATH else []
+print(f"✅ القرآن: {len(QURAN_DATA)} آية")
 
 TAFSIR_PATH = find_file('tafsir_saadi.json')
 TAFSIR_LIST = load_json(TAFSIR_PATH) if TAFSIR_PATH else []
@@ -169,12 +199,12 @@ HADITH_BOOKS = {}
 BUKHARI_PATH = find_file('bukhari.json')
 if BUKHARI_PATH:
     HADITH_BOOKS['bukhari'] = load_hadith_file(BUKHARI_PATH, 'صحيح البخاري')
-    print(f"✅ البخاري: {len(HADITH_BOOKS['bukhari'])} حديث (من {BUKHARI_PATH})")
+    print(f"✅ البخاري: {len(HADITH_BOOKS['bukhari'])} حديث")
 
 MUSLIM_PATH = find_file('muslim.json')
 if MUSLIM_PATH:
     HADITH_BOOKS['muslim'] = load_hadith_file(MUSLIM_PATH, 'صحيح مسلم')
-    print(f"✅ مسلم: {len(HADITH_BOOKS['muslim'])} حديث (من {MUSLIM_PATH})")
+    print(f"✅ مسلم: {len(HADITH_BOOKS['muslim'])} حديث")
 
 print(f"✅ إجمالي الكتب: {len(HADITH_BOOKS)}")
 print("=" * 60)
@@ -194,16 +224,24 @@ DEFAULT_PRAYER = {
 
 @app.template_filter('highlight')
 def highlight_filter(text, keyword):
+    """تظليل يتجاهل التشكيل العربي"""
     if not keyword or not text:
         return text
     try:
+        diac = "\u064B-\u065F\u0670\u06D6-\u06ED"
         words = [w for w in re.split(r'\s+', keyword) if len(w) >= 2]
         if not words:
             words = [keyword]
         result = str(text)
         for w in words:
-            esc = re.escape(w)
-            result = re.sub(esc, f'<mark>{w}</mark>', result)
+            parts = []
+            for ch in w:
+                parts.append(re.escape(ch) + "[" + diac + "]*")
+            pattern = "".join(parts)
+            try:
+                result = re.sub(pattern, lambda m: '<mark>' + m.group(0) + '</mark>', result)
+            except re.error:
+                result = result.replace(w, '<mark>' + w + '</mark>')
         return result
     except Exception:
         return text
@@ -227,7 +265,7 @@ def search_quran(keyword, surah_filter):
         else:
             match = all(kw in norm_text for kw in keywords)
         if match:
-            surah_name = SURAH_NAMES[s - 1] if 1 <= s <= 114 else ''
+            surah_name = SURAH_NAMES[s - 1] if s and 1 <= s <= 114 else ''
             results.append({
                 'type': 'ayah',
                 'number': a,
