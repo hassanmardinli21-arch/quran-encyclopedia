@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المكتبة القرآنية والتفاسير</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .ayah-item { border-bottom: 1px solid #e2e8f0; padding: 15px 0; }
+        .ayah-text { font-size: 1.2rem; line-height: 2; }
+        .ayah-info { color: #64748b; font-size: 0.9rem; }
+        mark { background: #fef08a; padding: 2px 4px; border-radius: 4px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .search-box input, .search-box select, .search-box button { padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        .search-box button { background: #2563eb; color: white; border: none; cursor: pointer; }
+        .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
+        .pagination a { padding: 8px 16px; background: #e2e8f0; border-radius: 8px; text-decoration: none; color: #1e293b; }
+        .pagination a:hover { background: #cbd5e1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center; color: #1e3a8a;">📖 المكتبة القرآنية والتفاسير</h1>
+
+        <!-- نموذج البحث -->
+        <form action="/search" method="GET" class="search-box">
+            <input type="text" name="keyword" placeholder="ابحث عن كلمة..." value="{{ keyword }}">
+            <select name="source">
+                <option value="quran" {% if source == 'quran' %}selected{% endif %}>القرآن الكريم</option>
+                <option value="saadi" {% if source == 'saadi' %}selected{% endif %}>تفسير السعدي</option>
+            </select>
+            <select name="surah">
+                <option value="all">جميع السور</option>
+                {% for s in surahs_names %}
+                    <option value="{{ loop.index }}" {% if current_surah == loop.index %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">🔍 بحث</button>
+        </form>
+
+        <!-- عرض النتائج -->
+        <div id="results">
+            {% if tafsir_data.ayahs %}
+                <p style="color: #475569;">عدد النتائج: {{ tafsir_data.ayahs|length }}</p>
+                {% for item in tafsir_data.ayahs %}
+                    <div class="ayah-item">
+                        <p class="ayah-text">{{ item.text | highlight(keyword) | safe }}</p>
+                        <span class="ayah-info">
+                            {% if item.surah_name %}
+                                سورة {{ item.surah_name }}
+                            {% endif %}
+                            {% if item.number %}
+                                - آية {{ item.number }}
+                            {% endif %}
+                            {% if item.numberInSurah %}
+                                - آية {{ item.numberInSurah }}
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="text-align: center; color: #94a3b8;">📭 لا توجد بيانات لعرضها أو لم يتم العثور على نتائج مطابقة.</p>
+            {% endif %}
+        </div>
+
+        <!-- الترقيم -->
+        {% if total_pages > 1 %}
+            <div class="pagination">
+                {% if page > 1 %}
+                    <a href="/search?keyword={{ keyword }}&source={{ source }}&surah={{ current_surah }}&page={{ page - 1 }}">⬅ السابق</a>
+                {% endif %}
+                <span>صفحة {{ page }} من {{ total_pages }}</span>
+                {% if page < total_pages %}
+                    <a href="/search?keyword={{ keyword }}&source={{ source }}&surah={{ current_surah }}&page={{ page + 1 }}">التالي ➡</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
