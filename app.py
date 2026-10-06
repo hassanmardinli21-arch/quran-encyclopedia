@@ -142,7 +142,6 @@ def get_surah():
 
 @app.route('/api/search')
 def search():
-    """البحث في كتاب واحد"""
     book_id = request.args.get('book', 'bukhari')
     query = request.args.get('query', '').strip()
 
@@ -166,7 +165,6 @@ def search():
 
 @app.route('/api/search_advanced')
 def search_advanced():
-    """البحث المتقدم: في كتب محددة أو كل الكتب أو القرآن"""
     query = request.args.get('query', '').strip()
     books_param = request.args.get('books', '')
     include_quran = request.args.get('quran', '0') == '1'
@@ -176,7 +174,6 @@ def search_advanced():
 
     result = {'books': {}, 'quran': []}
 
-    # البحث في القرآن
     if include_quran:
         quran_results = []
         for (s, a), text in quran_ayahs_map.items():
@@ -190,7 +187,6 @@ def search_advanced():
                 })
         result['quran'] = quran_results
 
-    # البحث في الكتب
     selected_books = []
     if books_param == 'all':
         selected_books = list(BOOKS.keys())
@@ -245,7 +241,6 @@ HTML_TEMPLATE = r"""
             color: var(--text-dark);
         }
 
-        /* خطوط محسّنة للنصوص العربية */
         .hadith-text, .ayah-line, .tafsir-panel, .search-result-item .res-text {
             font-family: 'Amiri', 'Traditional Arabic', serif;
             text-align: right;
@@ -283,15 +278,16 @@ HTML_TEMPLATE = r"""
             background: #2d6a4f;
             color: white;
             border: 1px solid rgba(255,255,255,0.2);
-            padding: 6px 14px;
+            padding: 8px 14px;
             border-radius: 6px;
             font-size: 13px;
             cursor: pointer;
             font-family: inherit;
             transition: all 0.2s;
+            font-weight: bold;
         }
         .top-btn:hover { background: #40916c; }
-        .top-btn.active { background: var(--gold); color: #1a4d2e; font-weight: bold; }
+        .top-btn.active { background: var(--gold); color: #1a4d2e; }
 
         .info-bar {
             background: #2d6a4f;
@@ -310,11 +306,11 @@ HTML_TEMPLATE = r"""
         .info-date {
             font-size: 14px;
             margin-bottom: 10px;
-            line-height: 1.8;
+            line-height: 1.9;
         }
-        .info-date .hijri-date { color: var(--gold); font-weight: bold; }
+        .info-date .hijri-date { color: var(--gold); font-weight: bold; font-size: 16px; }
         .info-date .greg-date { color: #e0f2e9; }
-        .info-date .day-name { color: #ffffff; font-weight: bold; }
+        .info-date .day-name { color: #ffffff; font-weight: bold; font-size: 16px; }
         .prayer-times {
             display: flex;
             justify-content: center;
@@ -344,6 +340,7 @@ HTML_TEMPLATE = r"""
             max-width: 900px;
             margin: 12px auto 0;
             align-items: center;
+            flex-wrap: wrap;
         }
         .search-area input {
             flex: 1;
@@ -352,6 +349,7 @@ HTML_TEMPLATE = r"""
             border: none;
             font-size: 15px;
             font-family: inherit;
+            min-width: 200px;
         }
         .search-area button {
             background: var(--gold);
@@ -359,10 +357,15 @@ HTML_TEMPLATE = r"""
             padding: 10px 16px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
+            color: white;
+            font-family: inherit;
+            white-space: nowrap;
         }
         .search-area button:hover { background: #b8935a; }
+        .search-area button.adv-btn { background: #27ae60; }
+        .search-area button.adv-btn:hover { background: #1e8449; }
 
         .text-controls {
             display: flex;
@@ -696,7 +699,6 @@ HTML_TEMPLATE = r"""
             font-size: 18px;
         }
 
-        /* ============ نافذة البحث المتقدم ============ */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -761,7 +763,7 @@ HTML_TEMPLATE = r"""
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 15px;
-            max-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
         }
         .books-selection h3 {
@@ -776,7 +778,7 @@ HTML_TEMPLATE = r"""
             flex-wrap: wrap;
         }
         .quick-select button {
-            padding: 6px 14px;
+            padding: 8px 14px;
             background: var(--main-green);
             color: white;
             border: none;
@@ -784,27 +786,33 @@ HTML_TEMPLATE = r"""
             cursor: pointer;
             font-size: 13px;
             font-family: inherit;
+            font-weight: bold;
         }
         .quick-select button:hover { background: #40916c; }
         .book-checkbox {
             display: flex;
             align-items: center;
-            padding: 8px 10px;
+            padding: 10px 12px;
             border-bottom: 1px solid #eee;
             cursor: pointer;
             transition: background 0.2s;
+            background: white;
+            border-radius: 6px;
+            margin-bottom: 4px;
         }
         .book-checkbox:hover { background: var(--light-green); }
         .book-checkbox input {
-            margin-left: 10px;
-            width: 18px;
-            height: 18px;
+            margin-left: 12px;
+            width: 20px;
+            height: 20px;
             cursor: pointer;
+            flex-shrink: 0;
         }
         .book-checkbox label {
             flex: 1;
             cursor: pointer;
-            font-size: 15px;
+            font-size: 16px;
+            font-weight: 500;
         }
         .book-checkbox.quran-special {
             background: #fff9e6;
@@ -827,7 +835,6 @@ HTML_TEMPLATE = r"""
         }
         .adv-search-btn:hover { background: #b8935a; }
 
-        /* نتائج البحث المتقدم */
         .adv-results-section {
             margin-bottom: 25px;
         }
@@ -860,7 +867,8 @@ HTML_TEMPLATE = r"""
             .prayer-times { gap: 8px; font-size: 12px; }
             .ayah-line { font-size: 24px; line-height: 2.2; }
             .surah-header-bar h2 { font-size: 24px; }
-            .top-btn { font-size: 12px; padding: 5px 10px; }
+            .top-btn { font-size: 12px; padding: 6px 10px; }
+            .search-area button { padding: 10px 12px; font-size: 13px; }
         }
 
         body.dark-mode {
@@ -876,9 +884,8 @@ HTML_TEMPLATE = r"""
         body.dark-mode .text-controls .size-display { background: #333; color: white; border-color: #555; }
         body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
         body.dark-mode .search-area input { background: #333; color: white; }
-        body.dark-mode .section-box { background: #333; }
         body.dark-mode .books-selection { background: #333; }
-        body.dark-mode .book-checkbox { border-color: #444; }
+        body.dark-mode .book-checkbox { background: #2a2a2a; border-color: #444; }
         body.dark-mode .book-checkbox:hover { background: #3a3a3a; }
         body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
         body.dark-mode .adv-search-input { background: #333; color: white; }
@@ -898,8 +905,8 @@ HTML_TEMPLATE = r"""
 
     <div class="search-area">
         <input type="text" id="searchInput" placeholder="ابحث في الكتاب الحالي..." onkeydown="if(event.key==='Enter') doSearch()">
-        <button onclick="doSearch()" title="بحث في الكتاب الحالي">🔍</button>
-        <button onclick="showAdvancedSearch()" title="بحث متقدم في عدة كتب" style="background:#27ae60;">🔎</button>
+        <button onclick="doSearch()" title="بحث في الكتاب الحالي">🔍 بحث</button>
+        <button class="adv-btn" onclick="showAdvancedSearch()" title="بحث متقدم في عدة كتب">🔎 بحث متقدم</button>
     </div>
 </div>
 
@@ -957,16 +964,16 @@ HTML_TEMPLATE = r"""
                 <button onclick="selectOnly9Books()">📚 الكتب التسعة</button>
             </div>
 
-            <label class="book-checkbox quran-special">
+            <div class="book-checkbox quran-special">
                 <input type="checkbox" id="chk_quran" value="quran">
                 <label for="chk_quran">📖 القرآن الكريم كاملاً</label>
-            </label>
+            </div>
 
             {% for key, value in books.items() %}
-            <label class="book-checkbox">
-                <input type="checkbox" class="book-chk" value="{{ key }}">
-                <label>{{ value }}</label>
-            </label>
+            <div class="book-checkbox">
+                <input type="checkbox" id="chk_{{ key }}" class="book-chk" value="{{ key }}">
+                <label for="chk_{{ key }}">{{ value }}</label>
+            </div>
             {% endfor %}
         </div>
 
@@ -1030,10 +1037,8 @@ HTML_TEMPLATE = r"""
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
         });
 
-        // اليوم
-        document.getElementById('dayName').innerText = now.toLocaleDateString('ar-SA', { weekday: 'long' });
+        document.getElementById('dayName').innerText = '📆 ' + now.toLocaleDateString('ar-SA', { weekday: 'long' });
 
-        // التاريخ الهجري عبر moment-hijri
         try {
             const m = moment();
             m.locale('ar-sa');
@@ -1043,7 +1048,6 @@ HTML_TEMPLATE = r"""
             document.getElementById('hijriDate').innerText = '🌙 ' + now.toLocaleDateString('ar-SA-u-ca-islamic', { year: 'numeric', month: 'long', day: 'numeric' });
         }
 
-        // التاريخ الميلادي
         document.getElementById('gregorianDate').innerText = '📅 ' + now.toLocaleDateString('ar-SA', {
             year: 'numeric', month: 'long', day: 'numeric'
         });
@@ -1208,7 +1212,6 @@ HTML_TEMPLATE = r"""
                             </div>
                             <div style="padding:10px;color:#666;font-size:14px;">كلمة البحث: <mark>${escapeHtml(query)}</mark></div>`;
 
-            // نتائج القرآن
             if (data.quran && data.quran.length > 0) {
                 html += `<div class="adv-results-section">
                             <div class="adv-book-title">
@@ -1224,7 +1227,6 @@ HTML_TEMPLATE = r"""
                 html += `</div>`;
             }
 
-            // نتائج الكتب
             if (data.books) {
                 for (const bookId in data.books) {
                     const bookData = data.books[bookId];
@@ -1428,7 +1430,7 @@ HTML_TEMPLATE = r"""
         navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة'));
     }
 
-    // ============ البحث العادي (في كتاب واحد) ============
+    // ============ البحث العادي ============
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim();
         if (!query) { alert('اكتب كلمة للبحث'); return; }
@@ -1506,7 +1508,6 @@ HTML_TEMPLATE = r"""
         return div.innerHTML;
     }
 
-    // تمييز آمن (بدون RegExp)
     function safeHighlight(text, query) {
         if (!query || !text) return escapeHtml(text || '');
         try {
