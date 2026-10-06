@@ -155,8 +155,6 @@ def search():
         if query in arabic_text:
             results.append({
                 'index': i,
-                'book': book_id,
-                'book_name': BOOKS[book_id],
                 'id': h.get('idInBook', i + 1),
                 'text': arabic_text,
                 'narrator': h.get('english', {}).get('narrator', '')
@@ -222,9 +220,7 @@ HTML_TEMPLATE = r"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>الموسوعة الإسلامية الشاملة</title>
     <script src="https://unpkg.com/adhan/lib/bundles/adhan.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment-hijri@2.2.0/moment-hijri.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -287,7 +283,6 @@ HTML_TEMPLATE = r"""
             font-weight: bold;
         }
         .top-btn:hover { background: #40916c; }
-        .top-btn.active { background: var(--gold); color: #1a4d2e; }
 
         .info-bar {
             background: #2d6a4f;
@@ -304,13 +299,13 @@ HTML_TEMPLATE = r"""
             font-family: 'Segoe UI', sans-serif;
         }
         .info-date {
-            font-size: 14px;
+            font-size: 15px;
             margin-bottom: 10px;
             line-height: 1.9;
         }
-        .info-date .hijri-date { color: var(--gold); font-weight: bold; font-size: 16px; }
-        .info-date .greg-date { color: #e0f2e9; }
-        .info-date .day-name { color: #ffffff; font-weight: bold; font-size: 16px; }
+        .info-date .hijri-date { color: var(--gold); font-weight: bold; font-size: 17px; }
+        .info-date .greg-date { color: #e0f2e9; font-size: 15px; }
+        .info-date .day-name { color: #ffffff; font-weight: bold; font-size: 17px; }
         .prayer-times {
             display: flex;
             justify-content: center;
@@ -354,7 +349,7 @@ HTML_TEMPLATE = r"""
         .search-area button {
             background: var(--gold);
             border: none;
-            padding: 10px 16px;
+            padding: 10px 18px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
@@ -766,11 +761,6 @@ HTML_TEMPLATE = r"""
             max-height: 400px;
             overflow-y: auto;
         }
-        .books-selection h3 {
-            color: var(--main-green);
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
         .quick-select {
             display: flex;
             gap: 8px;
@@ -885,7 +875,7 @@ HTML_TEMPLATE = r"""
         body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
         body.dark-mode .search-area input { background: #333; color: white; }
         body.dark-mode .books-selection { background: #333; }
-        body.dark-mode .book-checkbox { background: #2a2a2a; border-color: #444; }
+        body.dark-mode .book-checkbox { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
         body.dark-mode .book-checkbox:hover { background: #3a3a3a; }
         body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
         body.dark-mode .adv-search-input { background: #333; color: white; }
@@ -1020,8 +1010,6 @@ HTML_TEMPLATE = r"""
 </div>
 
 <script>
-    moment.locale('ar-sa');
-
     let currentBook = null;
     let currentIndex = 0;
     let currentSurah = 1;
@@ -1030,6 +1018,92 @@ HTML_TEMPLATE = r"""
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '{}');
     let currentSearchQuery = '';
 
+    // أسماء الأشهر الشامية
+    const SYRIAN_MONTHS = [
+        'كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران',
+        'تموز', 'آب', 'أيلول', 'تشرين الأول', 'تشرين الثاني', 'كانون الأول'
+    ];
+
+    const ARABIC_DAYS = [
+        'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'
+    ];
+
+    // التاريخ الهجري بأسماء الأشهر الصحيحة
+    const HIJRI_MONTHS = [
+        'محرّم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة',
+        'رجب', 'شعبان', 'رمضان', 'شوّال', 'ذو القعدة', 'ذو الحجة'
+    ];
+
+    // ============ تحويل التاريخ الهجري يدوياً (خوارزمية دقيقة) ============
+    function toHijri(date) {
+        // خوارزمية تحويل ميلادي إلى هجري (Kuwaiti algorithm)
+        let day = date.getDate();
+        let month = date.getMonth() + 1;
+        let year = date.getFullYear();
+
+        let m = month;
+        let y = year;
+        let d = day;
+
+        if (m < 3) {
+            y -= 1;
+            m += 12;
+        }
+        let a = Math.floor(y / 100);
+        let b = 2 - a + Math.floor(a / 4);
+
+        if (y < 1583) b = 0;
+        if (y === 1582) {
+            if (m > 10) b = -10;
+            if (m === 10) {
+                b = 0;
+                if (d > 4) b = -10;
+            }
+        }
+
+        let jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + b - 1524;
+
+        b = 0;
+        if (jd > 2299160) {
+            a = Math.floor((jd - 1867216.25) / 36524.25);
+            b = 1 + a - Math.floor(a / 4);
+        }
+        let bb = jd + b + 1524;
+        let cc = Math.floor((bb - 122.1) / 365.25);
+        let dd = Math.floor(365.25 * cc);
+        let ee = Math.floor((bb - dd) / 30.6001);
+
+        day = bb - dd - Math.floor(30.6001 * ee);
+
+        if (ee < 14) {
+            month = ee - 1;
+        } else {
+            month = ee - 13;
+        }
+        if (month > 2) {
+            year = cc - 4716;
+        } else {
+            year = cc - 4715;
+        }
+
+        // تحويل ميلادي إلى هجري
+        let jdH = Math.floor((11 * year + 3) / 30) + 354 * year + Math.floor(30 * (month - 1)) -
+                  Math.floor((month - 1) / 2) + day + 1948440 - 385;
+
+        let l = jdH - 1948440 + 10632;
+        let n = Math.floor((l - 1) / 10631);
+        l = l - 10631 * n + 354;
+        let j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719) +
+                Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
+        l = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) -
+            Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+        let hMonth = Math.floor((24 * l) / 709);
+        let hDay = l - Math.floor((709 * hMonth) / 24);
+        let hYear = 30 * n + j - 30;
+
+        return { day: hDay, month: hMonth, year: hYear };
+    }
+
     // ============ الوقت والتاريخ ============
     function updateTime() {
         const now = new Date();
@@ -1037,20 +1111,24 @@ HTML_TEMPLATE = r"""
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
         });
 
-        document.getElementById('dayName').innerText = '📆 ' + now.toLocaleDateString('ar-SA', { weekday: 'long' });
+        // اليوم بالعربية
+        const dayIndex = now.getDay();
+        document.getElementById('dayName').innerText = '📆 ' + ARABIC_DAYS[dayIndex];
 
+        // التاريخ الهجري
         try {
-            const m = moment();
-            m.locale('ar-sa');
-            const hijri = m.format('iD iMMMM iYYYY');
-            document.getElementById('hijriDate').innerText = '🌙 ' + hijri + ' هـ';
+            const h = toHijri(now);
+            const hMonthName = HIJRI_MONTHS[h.month - 1] || '';
+            document.getElementById('hijriDate').innerText = `🌙 ${h.day} ${hMonthName} ${h.year} هـ`;
         } catch(e) {
-            document.getElementById('hijriDate').innerText = '🌙 ' + now.toLocaleDateString('ar-SA-u-ca-islamic', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('hijriDate').innerText = '🌙 التاريخ الهجري غير متاح';
         }
 
-        document.getElementById('gregorianDate').innerText = '📅 ' + now.toLocaleDateString('ar-SA', {
-            year: 'numeric', month: 'long', day: 'numeric'
-        });
+        // التاريخ الميلادي بالشهور الشامية
+        const d = now.getDate();
+        const m = now.getMonth();
+        const y = now.getFullYear();
+        document.getElementById('gregorianDate').innerText = `📅 ${d} ${SYRIAN_MONTHS[m]} ${y} م`;
     }
     setInterval(updateTime, 1000);
     updateTime();
