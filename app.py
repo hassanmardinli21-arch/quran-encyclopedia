@@ -398,6 +398,8 @@ HTML_TEMPLATE = r"""
             overflow-x: auto;
             white-space: nowrap;
             scrollbar-width: thin;
+            position: relative;
+            z-index: 50;
         }
         .books-bar::-webkit-scrollbar { height: 8px; }
         .books-bar::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
@@ -700,7 +702,7 @@ HTML_TEMPLATE = r"""
             top: 0; left: 0;
             width: 100%; height: 100%;
             background: rgba(0,0,0,0.7);
-            z-index: 1000;
+            z-index: 2000;
             justify-content: center;
             align-items: center;
             padding: 20px;
@@ -847,6 +849,51 @@ HTML_TEMPLATE = r"""
             font-size: 13px;
         }
 
+        /* ==================== الوضع الليلي ==================== */
+        body.dark-mode {
+            --bg: #1a1a1a;
+            --text-dark: #e0e0e0;
+        }
+        body.dark-mode .header { background: #0d2e1a; }
+        body.dark-mode .top-btn { background: #1a4d2e; border-color: #333; }
+        body.dark-mode .top-btn:hover { background: #2d6a4f; }
+        body.dark-mode .info-bar { background: #0d2e1a; }
+        body.dark-mode .search-area input { background: #333; color: white; }
+        body.dark-mode .text-controls { background: #2a2a2a; border-color: #444; }
+        body.dark-mode .text-controls .size-display { background: #333; color: white; border-color: #555; }
+        body.dark-mode .books-bar { background: #0d2e1a; }
+        body.dark-mode .book-btn { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
+        body.dark-mode .book-btn:hover { background: #3a3a3a; }
+        body.dark-mode .book-btn.active { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
+        body.dark-mode .hadith-card { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
+        body.dark-mode .hadith-header { border-color: #444; }
+        body.dark-mode .hadith-number { background: #0d2e1a; }
+        body.dark-mode .hadith-text { background: #333; color: #e0e0e0; }
+        body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
+        body.dark-mode .surah-container { background: #222; border-color: var(--gold); }
+        body.dark-mode .surah-header-bar { background: linear-gradient(135deg, #0d2e1a 0%, #1a4d2e 100%); }
+        body.dark-mode .basmala { color: var(--gold); }
+        body.dark-mode .ayah-line { color: #e0e0e0; }
+        body.dark-mode .ayah-line:hover { background: #2f2f2f; }
+        body.dark-mode .ayah-line.highlight { background: #4a3f1a; }
+        body.dark-mode .ayah-num-badge { background: var(--gold); color: #1a1a1a; }
+        body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
+        body.dark-mode .tafsir-title { color: #4ade80; }
+        body.dark-mode .quran-tools { background: #2a2a2a; border-color: #444; }
+        body.dark-mode .quran-tools select { background: #333; color: white; border-color: #555; }
+        body.dark-mode .search-result-item { border-color: #444; }
+        body.dark-mode .search-result-item:hover { background: #3a3a3a; }
+        body.dark-mode .modal-content { background: #2a2a2a; border-color: var(--gold); color: #e0e0e0; }
+        body.dark-mode .modal-content h2 { color: var(--gold); }
+        body.dark-mode .adv-search-input { background: #333; color: white; border-color: #555; }
+        body.dark-mode .books-selection { background: #2a2a2a; }
+        body.dark-mode .book-checkbox { background: #333; border-color: #444; color: #e0e0e0; }
+        body.dark-mode .book-checkbox:hover { background: #3a3a3a; }
+        body.dark-mode .book-checkbox.quran-special { background: #3a3a2a; }
+        body.dark-mode .quick-select button { background: #2d6a4f; }
+        body.dark-mode .adv-book-title { background: #0d2e1a; }
+        body.dark-mode mark { background: #b8860b; color: white; }
+
         @media (max-width: 600px) {
             .header h1 { font-size: 20px; }
             .hadith-text { font-size: 20px; }
@@ -860,25 +907,6 @@ HTML_TEMPLATE = r"""
             .top-btn { font-size: 12px; padding: 6px 10px; }
             .search-area button { padding: 10px 12px; font-size: 13px; }
         }
-
-        body.dark-mode {
-            --bg: #1a1a1a;
-            --text-dark: #e0e0e0;
-        }
-        body.dark-mode .hadith-card, body.dark-mode .modal-content, body.dark-mode .quran-tools { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
-        body.dark-mode .hadith-text { background: #333; color: #e0e0e0; }
-        body.dark-mode .surah-container { background: #222; border-color: var(--gold); }
-        body.dark-mode .ayah-line { color: #e0e0e0; }
-        body.dark-mode .ayah-line:hover { background: #2f2f2f; }
-        body.dark-mode .text-controls { background: #2a2a2a; border-color: #444; }
-        body.dark-mode .text-controls .size-display { background: #333; color: white; border-color: #555; }
-        body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
-        body.dark-mode .search-area input { background: #333; color: white; }
-        body.dark-mode .books-selection { background: #333; }
-        body.dark-mode .book-checkbox { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
-        body.dark-mode .book-checkbox:hover { background: #3a3a3a; }
-        body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
-        body.dark-mode .adv-search-input { background: #333; color: white; }
     </style>
 </head>
 <body>
@@ -1018,6 +1046,9 @@ HTML_TEMPLATE = r"""
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '{}');
     let currentSearchQuery = '';
 
+    // تخزين قائمة السور من Flask
+    const ALL_SURAHS = {{ surahs|tojson }};
+
     // أسماء الأشهر الشامية
     const SYRIAN_MONTHS = [
         'كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران',
@@ -1028,15 +1059,13 @@ HTML_TEMPLATE = r"""
         'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'
     ];
 
-    // التاريخ الهجري بأسماء الأشهر الصحيحة
     const HIJRI_MONTHS = [
         'محرّم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة',
         'رجب', 'شعبان', 'رمضان', 'شوّال', 'ذو القعدة', 'ذو الحجة'
     ];
 
-    // ============ تحويل التاريخ الهجري يدوياً (خوارزمية دقيقة) ============
+    // ============ تحويل التاريخ الهجري يدوياً ============
     function toHijri(date) {
-        // خوارزمية تحويل ميلادي إلى هجري (Kuwaiti algorithm)
         let day = date.getDate();
         let month = date.getMonth() + 1;
         let year = date.getFullYear();
@@ -1086,7 +1115,6 @@ HTML_TEMPLATE = r"""
             year = cc - 4715;
         }
 
-        // تحويل ميلادي إلى هجري
         let jdH = Math.floor((11 * year + 3) / 30) + 354 * year + Math.floor(30 * (month - 1)) -
                   Math.floor((month - 1) / 2) + day + 1948440 - 385;
 
@@ -1111,11 +1139,9 @@ HTML_TEMPLATE = r"""
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
         });
 
-        // اليوم بالعربية
         const dayIndex = now.getDay();
         document.getElementById('dayName').innerText = '📆 ' + ARABIC_DAYS[dayIndex];
 
-        // التاريخ الهجري
         try {
             const h = toHijri(now);
             const hMonthName = HIJRI_MONTHS[h.month - 1] || '';
@@ -1124,7 +1150,6 @@ HTML_TEMPLATE = r"""
             document.getElementById('hijriDate').innerText = '🌙 التاريخ الهجري غير متاح';
         }
 
-        // التاريخ الميلادي بالشهور الشامية
         const d = now.getDate();
         const m = now.getMonth();
         const y = now.getFullYear();
@@ -1135,18 +1160,29 @@ HTML_TEMPLATE = r"""
 
     // ============ الموقع ============
     function detectLocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    calculatePrayerTimes(position.coords.latitude, position.coords.longitude);
-                    reverseGeocode(position.coords.latitude, position.coords.longitude);
-                },
-                (error) => {
-                    document.getElementById('locationInfo').innerText = '⚠️ لم يتم السماح بالوصول - استخدام مكة';
-                    calculatePrayerTimes(21.4225, 39.8262);
-                }
-            );
+        if (!navigator.geolocation) {
+            document.getElementById('locationInfo').innerText = '⚠️ المتصفح لا يدعم تحديد الموقع - استخدام مكة';
+            calculatePrayerTimes(21.4225, 39.8262);
+            return;
         }
+        document.getElementById('locationInfo').innerText = '📍 جاري تحديد الموقع...';
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                calculatePrayerTimes(lat, lng);
+                reverseGeocode(lat, lng);
+            },
+            (error) => {
+                let msg = '⚠️ فشل تحديد الموقع - استخدام مكة المكرمة';
+                if (error.code === 1) msg = '⚠️ تم رفض الإذن - استخدام مكة المكرمة';
+                else if (error.code === 2) msg = '⚠️ الموقع غير متاح - استخدام مكة';
+                else if (error.code === 3) msg = '⚠️ انتهت المهلة - استخدام مكة';
+                document.getElementById('locationInfo').innerText = msg;
+                calculatePrayerTimes(21.4225, 39.8262);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
     }
 
     async function reverseGeocode(lat, lng) {
@@ -1162,6 +1198,11 @@ HTML_TEMPLATE = r"""
     }
 
     function calculatePrayerTimes(lat, lng) {
+        if (typeof adhan === 'undefined') {
+            console.warn('مكتبة adhan لم تُحمَّل بعد، إعادة المحاولة...');
+            setTimeout(() => calculatePrayerTimes(lat, lng), 500);
+            return;
+        }
         try {
             const coordinates = new adhan.Coordinates(lat, lng);
             const params = adhan.CalculationMethod.MuslimWorldLeague();
@@ -1173,10 +1214,13 @@ HTML_TEMPLATE = r"""
             document.getElementById('asrTime').innerText = fmt(prayerTimes.asr);
             document.getElementById('maghribTime').innerText = fmt(prayerTimes.maghrib);
             document.getElementById('ishaTime').innerText = fmt(prayerTimes.isha);
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error('Prayer times error:', e); }
     }
 
-    detectLocation();
+    // استدعاء تحديد الموقع بعد تحميل الصفحة بالكامل
+    window.addEventListener('load', () => {
+        setTimeout(detectLocation, 800);
+    });
 
     // ============ الخط ============
     function changeFontSize(delta) {
@@ -1259,6 +1303,7 @@ HTML_TEMPLATE = r"""
         }
 
         hideAdvancedSearch();
+        currentSearchQuery = query;
         const content = document.getElementById('content');
         content.innerHTML = '<div class="loading">جاري البحث...</div>';
 
@@ -1336,8 +1381,13 @@ HTML_TEMPLATE = r"""
     // ============ الكتب ============
     function setActiveBook(bookId) {
         document.querySelectorAll('.book-btn').forEach(b => b.classList.remove('active'));
-        if (bookId === 'quran') document.getElementById('quranBtn').classList.add('active');
-        else document.querySelector(`[data-book="${bookId}"]`).classList.add('active');
+        if (bookId === 'quran') {
+            const qb = document.getElementById('quranBtn');
+            if (qb) qb.classList.add('active');
+        } else {
+            const btn = document.querySelector(`[data-book="${bookId}"]`);
+            if (btn) btn.classList.add('active');
+        }
     }
 
     async function selectBook(bookId) {
@@ -1419,7 +1469,7 @@ HTML_TEMPLATE = r"""
             return;
         }
 
-        const surahsArray = JSON.parse(`{{ surahs|tojson }}`);
+        const surahsArray = ALL_SURAHS;
 
         let surahSelectHtml = '<select id="surahSelect" onchange="showSurah(this.value)">';
         surahsArray.forEach(s => {
