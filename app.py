@@ -122,6 +122,40 @@ def get_hadith():
         'narrator': h.get('english', {}).get('narrator', '')
     })
 
+@app.route('/api/hadith_by_id')
+def get_hadith_by_id():
+    book_id = request.args.get('book', 'bukhari')
+    hadith_id = request.args.get('id', 0, type=int)
+
+    if book_id not in BOOKS:
+        return jsonify({'error': 'كتاب غير موجود'})
+
+    hadiths = load_hadith_book(book_id)
+    if not hadiths:
+        return jsonify({'error': 'لا توجد أحاديث'})
+
+    for i, h in enumerate(hadiths):
+        if h.get('idInBook') == hadith_id:
+            return jsonify({
+                'index': i,
+                'total': len(hadiths),
+                'id': h.get('idInBook', i + 1),
+                'text': h.get('arabic', ''),
+                'narrator': h.get('english', {}).get('narrator', '')
+            })
+
+    if 0 < hadith_id <= len(hadiths):
+        h = hadiths[hadith_id - 1]
+        return jsonify({
+            'index': hadith_id - 1,
+            'total': len(hadiths),
+            'id': h.get('idInBook', hadith_id),
+            'text': h.get('arabic', ''),
+            'narrator': h.get('english', {}).get('narrator', '')
+        })
+
+    return jsonify({'error': f'الحديث رقم {hadith_id} غير موجود'})
+
 @app.route('/api/surah')
 def get_surah():
     surah_num = request.args.get('surah', 1, type=int)
@@ -398,8 +432,6 @@ HTML_TEMPLATE = r"""
             overflow-x: auto;
             white-space: nowrap;
             scrollbar-width: thin;
-            position: relative;
-            z-index: 50;
         }
         .books-bar::-webkit-scrollbar { height: 8px; }
         .books-bar::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
@@ -479,6 +511,50 @@ HTML_TEMPLATE = r"""
             border-radius: 8px;
             text-align: right;
         }
+
+        .hadith-jump-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 15px auto;
+            padding: 12px 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            max-width: 500px;
+            flex-wrap: wrap;
+        }
+        .hadith-jump-bar label {
+            font-weight: bold;
+            color: var(--main-green);
+            font-size: 15px;
+        }
+        .hadith-jump-bar input {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+            width: 140px;
+            text-align: center;
+        }
+        .hadith-jump-bar input:focus {
+            outline: none;
+            border-color: var(--main-green);
+        }
+        .hadith-jump-bar button {
+            background: var(--gold);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: bold;
+            font-family: inherit;
+        }
+        .hadith-jump-bar button:hover { background: #b8935a; }
 
         .surah-container {
             background: #fdfaf3;
@@ -702,7 +778,7 @@ HTML_TEMPLATE = r"""
             top: 0; left: 0;
             width: 100%; height: 100%;
             background: rgba(0,0,0,0.7);
-            z-index: 2000;
+            z-index: 1000;
             justify-content: center;
             align-items: center;
             padding: 20px;
@@ -849,51 +925,6 @@ HTML_TEMPLATE = r"""
             font-size: 13px;
         }
 
-        /* ==================== الوضع الليلي ==================== */
-        body.dark-mode {
-            --bg: #1a1a1a;
-            --text-dark: #e0e0e0;
-        }
-        body.dark-mode .header { background: #0d2e1a; }
-        body.dark-mode .top-btn { background: #1a4d2e; border-color: #333; }
-        body.dark-mode .top-btn:hover { background: #2d6a4f; }
-        body.dark-mode .info-bar { background: #0d2e1a; }
-        body.dark-mode .search-area input { background: #333; color: white; }
-        body.dark-mode .text-controls { background: #2a2a2a; border-color: #444; }
-        body.dark-mode .text-controls .size-display { background: #333; color: white; border-color: #555; }
-        body.dark-mode .books-bar { background: #0d2e1a; }
-        body.dark-mode .book-btn { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
-        body.dark-mode .book-btn:hover { background: #3a3a3a; }
-        body.dark-mode .book-btn.active { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
-        body.dark-mode .hadith-card { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
-        body.dark-mode .hadith-header { border-color: #444; }
-        body.dark-mode .hadith-number { background: #0d2e1a; }
-        body.dark-mode .hadith-text { background: #333; color: #e0e0e0; }
-        body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
-        body.dark-mode .surah-container { background: #222; border-color: var(--gold); }
-        body.dark-mode .surah-header-bar { background: linear-gradient(135deg, #0d2e1a 0%, #1a4d2e 100%); }
-        body.dark-mode .basmala { color: var(--gold); }
-        body.dark-mode .ayah-line { color: #e0e0e0; }
-        body.dark-mode .ayah-line:hover { background: #2f2f2f; }
-        body.dark-mode .ayah-line.highlight { background: #4a3f1a; }
-        body.dark-mode .ayah-num-badge { background: var(--gold); color: #1a1a1a; }
-        body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
-        body.dark-mode .tafsir-title { color: #4ade80; }
-        body.dark-mode .quran-tools { background: #2a2a2a; border-color: #444; }
-        body.dark-mode .quran-tools select { background: #333; color: white; border-color: #555; }
-        body.dark-mode .search-result-item { border-color: #444; }
-        body.dark-mode .search-result-item:hover { background: #3a3a3a; }
-        body.dark-mode .modal-content { background: #2a2a2a; border-color: var(--gold); color: #e0e0e0; }
-        body.dark-mode .modal-content h2 { color: var(--gold); }
-        body.dark-mode .adv-search-input { background: #333; color: white; border-color: #555; }
-        body.dark-mode .books-selection { background: #2a2a2a; }
-        body.dark-mode .book-checkbox { background: #333; border-color: #444; color: #e0e0e0; }
-        body.dark-mode .book-checkbox:hover { background: #3a3a3a; }
-        body.dark-mode .book-checkbox.quran-special { background: #3a3a2a; }
-        body.dark-mode .quick-select button { background: #2d6a4f; }
-        body.dark-mode .adv-book-title { background: #0d2e1a; }
-        body.dark-mode mark { background: #b8860b; color: white; }
-
         @media (max-width: 600px) {
             .header h1 { font-size: 20px; }
             .hadith-text { font-size: 20px; }
@@ -907,6 +938,28 @@ HTML_TEMPLATE = r"""
             .top-btn { font-size: 12px; padding: 6px 10px; }
             .search-area button { padding: 10px 12px; font-size: 13px; }
         }
+
+        body.dark-mode {
+            --bg: #1a1a1a;
+            --text-dark: #e0e0e0;
+        }
+        body.dark-mode .hadith-card, body.dark-mode .modal-content, body.dark-mode .quran-tools { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
+        body.dark-mode .hadith-text { background: #333; color: #e0e0e0; }
+        body.dark-mode .hadith-jump-bar { background: #2a2a2a; }
+        body.dark-mode .hadith-jump-bar input { background: #333; color: white; border-color: #555; }
+        body.dark-mode .hadith-jump-bar label { color: var(--gold); }
+        body.dark-mode .surah-container { background: #222; border-color: var(--gold); }
+        body.dark-mode .ayah-line { color: #e0e0e0; }
+        body.dark-mode .ayah-line:hover { background: #2f2f2f; }
+        body.dark-mode .text-controls { background: #2a2a2a; border-color: #444; }
+        body.dark-mode .text-controls .size-display { background: #333; color: white; border-color: #555; }
+        body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
+        body.dark-mode .search-area input { background: #333; color: white; }
+        body.dark-mode .books-selection { background: #333; }
+        body.dark-mode .book-checkbox { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
+        body.dark-mode .book-checkbox:hover { background: #3a3a3a; }
+        body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
+        body.dark-mode .adv-search-input { background: #333; color: white; }
     </style>
 </head>
 <body>
@@ -1046,10 +1099,8 @@ HTML_TEMPLATE = r"""
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '{}');
     let currentSearchQuery = '';
 
-    // تخزين قائمة السور من Flask
     const ALL_SURAHS = {{ surahs|tojson }};
 
-    // أسماء الأشهر الشامية
     const SYRIAN_MONTHS = [
         'كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران',
         'تموز', 'آب', 'أيلول', 'تشرين الأول', 'تشرين الثاني', 'كانون الأول'
@@ -1064,7 +1115,6 @@ HTML_TEMPLATE = r"""
         'رجب', 'شعبان', 'رمضان', 'شوّال', 'ذو القعدة', 'ذو الحجة'
     ];
 
-    // ============ تحويل التاريخ الهجري يدوياً ============
     function toHijri(date) {
         let day = date.getDate();
         let month = date.getMonth() + 1;
@@ -1132,7 +1182,6 @@ HTML_TEMPLATE = r"""
         return { day: hDay, month: hMonth, year: hYear };
     }
 
-    // ============ الوقت والتاريخ ============
     function updateTime() {
         const now = new Date();
         document.getElementById('currentTime').innerText = now.toLocaleTimeString('ar-SA', {
@@ -1158,30 +1207,31 @@ HTML_TEMPLATE = r"""
     setInterval(updateTime, 1000);
     updateTime();
 
-    // ============ الموقع ============
+    // ============ الموقع (باستخدام Aladhan API) ============
     function detectLocation() {
+        const locEl = document.getElementById('locationInfo');
         if (!navigator.geolocation) {
-            document.getElementById('locationInfo').innerText = '⚠️ المتصفح لا يدعم تحديد الموقع - استخدام مكة';
-            calculatePrayerTimes(21.4225, 39.8262);
+            locEl.innerText = '⚠️ المتصفح لا يدعم تحديد الموقع - استخدام مكة';
+            fetchPrayerTimesByCoords(21.4225, 39.8262);
             return;
         }
-        document.getElementById('locationInfo').innerText = '📍 جاري تحديد الموقع...';
+        locEl.innerText = '📍 جاري تحديد الموقع...';
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
-                calculatePrayerTimes(lat, lng);
+                fetchPrayerTimesByCoords(lat, lng);
                 reverseGeocode(lat, lng);
             },
             (error) => {
-                let msg = '⚠️ فشل تحديد الموقع - استخدام مكة المكرمة';
-                if (error.code === 1) msg = '⚠️ تم رفض الإذن - استخدام مكة المكرمة';
+                let msg = '⚠️ فشل تحديد الموقع - استخدام مكة';
+                if (error.code === 1) msg = '⚠️ تم رفض الإذن - استخدام مكة';
                 else if (error.code === 2) msg = '⚠️ الموقع غير متاح - استخدام مكة';
                 else if (error.code === 3) msg = '⚠️ انتهت المهلة - استخدام مكة';
-                document.getElementById('locationInfo').innerText = msg;
-                calculatePrayerTimes(21.4225, 39.8262);
+                locEl.innerText = msg;
+                fetchPrayerTimesByCoords(21.4225, 39.8262);
             },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 300000 }
         );
     }
 
@@ -1197,13 +1247,34 @@ HTML_TEMPLATE = r"""
         }
     }
 
-    function calculatePrayerTimes(lat, lng) {
-        if (typeof adhan === 'undefined') {
-            console.warn('مكتبة adhan لم تُحمَّل بعد، إعادة المحاولة...');
-            setTimeout(() => calculatePrayerTimes(lat, lng), 500);
-            return;
-        }
+    async function fetchPrayerTimesByCoords(lat, lng) {
         try {
+            const today = new Date();
+            const dateStr = `${today.getDate()}-${today.getMonth() + 1}-${today.getFullYear()}`;
+            const url = `https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=4`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.code === 200 && data.data && data.data.timings) {
+                const t = data.data.timings;
+                const clean = (s) => s ? s.split(' ')[0] : '--:--';
+                document.getElementById('fajrTime').innerText = clean(t.Fajr);
+                document.getElementById('sunriseTime').innerText = clean(t.Sunrise);
+                document.getElementById('dhuhrTime').innerText = clean(t.Dhuhr);
+                document.getElementById('asrTime').innerText = clean(t.Asr);
+                document.getElementById('maghribTime').innerText = clean(t.Maghrib);
+                document.getElementById('ishaTime').innerText = clean(t.Isha);
+            } else {
+                fallbackPrayerTimes(lat, lng);
+            }
+        } catch(e) {
+            console.error('fetchPrayerTimesByCoords error:', e);
+            fallbackPrayerTimes(lat, lng);
+        }
+    }
+
+    function fallbackPrayerTimes(lat, lng) {
+        try {
+            if (typeof adhan === 'undefined') return;
             const coordinates = new adhan.Coordinates(lat, lng);
             const params = adhan.CalculationMethod.MuslimWorldLeague();
             const prayerTimes = new adhan.PrayerTimes(coordinates, new Date(), params);
@@ -1214,12 +1285,11 @@ HTML_TEMPLATE = r"""
             document.getElementById('asrTime').innerText = fmt(prayerTimes.asr);
             document.getElementById('maghribTime').innerText = fmt(prayerTimes.maghrib);
             document.getElementById('ishaTime').innerText = fmt(prayerTimes.isha);
-        } catch(e) { console.error('Prayer times error:', e); }
+        } catch(e) { console.error('fallback error:', e); }
     }
 
-    // استدعاء تحديد الموقع بعد تحميل الصفحة بالكامل
     window.addEventListener('load', () => {
-        setTimeout(detectLocation, 800);
+        setTimeout(detectLocation, 500);
     });
 
     // ============ الخط ============
@@ -1427,6 +1497,11 @@ HTML_TEMPLATE = r"""
                         <button class="copy-btn" onclick="toggleBookmark()">${isBookmarked ? '🔖 إزالة العلامة' : '🔖 علامة'}</button>
                     </div>
                 </div>
+                <div class="hadith-jump-bar">
+                    <label>🔢 اذهب إلى حديث رقم:</label>
+                    <input type="number" id="hadithJumpInput" min="1" max="${data.total}" placeholder="1 - ${data.total}" onkeydown="if(event.key==='Enter') jumpToHadith()">
+                    <button onclick="jumpToHadith()">اذهب</button>
+                </div>
                 <div class="nav-buttons">
                     <button class="nav-btn" onclick="showHadith(${data.index - 1})" ${data.index === 0 ? 'disabled' : ''}>◀ السابق</button>
                     <button class="nav-btn" onclick="showHadith(0)">🏠 الأول</button>
@@ -1434,6 +1509,37 @@ HTML_TEMPLATE = r"""
                 </div>
             `;
         } catch (e) {
+            content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ</div>';
+        }
+    }
+
+    async function jumpToHadith() {
+        const input = document.getElementById('hadithJumpInput');
+        if (!input) return;
+        const id = parseInt(input.value);
+        if (!id || id < 1) {
+            alert('أدخل رقم حديث صحيح');
+            return;
+        }
+
+        const content = document.getElementById('content');
+        content.innerHTML = '<div class="loading">جاري البحث عن الحديث رقم ' + id + '...</div>';
+
+        try {
+            const res = await fetch(`/api/hadith_by_id?book=${currentBook}&id=${id}`);
+            const data = await res.json();
+
+            if (data.error) {
+                content.innerHTML = `<div class="hadith-card" style="text-align:center;color:#c0392b;">
+                    ⚠️ ${data.error}
+                    <br><br>
+                    <button class="nav-btn" onclick="showHadith(0)">العودة للأول</button>
+                </div>`;
+                return;
+            }
+
+            await showHadith(data.index);
+        } catch(e) {
             content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ</div>';
         }
     }
