@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -7,8 +6,9 @@ from flask import Flask, render_template_string, request, jsonify
 app = Flask(__name__)
 
 # ==================== 1. تحميل القرآن والتفسير ====================
-QURAN_PATH = 'quran.json'
-TAFSIR_PATH = 'tafsir_saadi.json'
+# تم تعديل المسارات لتشير إلى مجلد data بناءً على هيكل مستودعك
+QURAN_PATH = 'data/quran.json'
+TAFSIR_PATH = 'data/tafsir_saadi.json'
 
 def load_json(filepath):
     try:
@@ -57,33 +57,10 @@ print(f"تم تحميل {len(tafsir_map)} تفسير.")
 # ==================== حساب الجُمّل (أبجد هوز) ====================
 ABJAD_VALUES = {
     'ا': 1, 'أ': 1, 'إ': 1, 'آ': 1, 'ء': 1, 'ؤ': 1, 'ئ': 1,
-    'ب': 2,
-    'ج': 3,
-    'د': 4,
-    'ه': 5, 'ة': 5,
-    'و': 6,
-    'ز': 7,
-    'ح': 8,
-    'ط': 9,
-    'ي': 10, 'ى': 10,
-    'ك': 20,
-    'ل': 30,
-    'م': 40,
-    'ن': 50,
-    'س': 60,
-    'ع': 70,
-    'ف': 80,
-    'ص': 90,
-    'ق': 100,
-    'ر': 200,
-    'ش': 300,
-    'ت': 400,
-    'ث': 500,
-    'خ': 600,
-    'ذ': 700,
-    'ض': 800,
-    'ظ': 900,
-    'غ': 1000,
+    'ب': 2, 'ج': 3, 'د': 4, 'ه': 5, 'ة': 5, 'و': 6, 'ز': 7, 'ح': 8, 'ط': 9,
+    'ي': 10, 'ى': 10, 'ك': 20, 'ل': 30, 'م': 40, 'ن': 50, 'س': 60, 'ع': 70,
+    'ف': 80, 'ص': 90, 'ق': 100, 'ر': 200, 'ش': 300, 'ت': 400, 'ث': 500,
+    'خ': 600, 'ذ': 700, 'ض': 800, 'ظ': 900, 'غ': 1000,
 }
 
 _DIACRITICS = re.compile(r'[\u064B-\u0652\u0670\u0640]')
@@ -160,21 +137,26 @@ def load_hadith_book(book_id):
         return loaded_books_cache[book_id]
 
     all_hadiths = []
-    single_file_path = f'{book_id}.json'
-    if os.path.exists(single_file_path):
-        data = load_json(single_file_path)
-        all_hadiths = data.get('hadiths', [])
-    elif os.path.isdir(book_id):
-        folder_path = book_id
-        files = os.listdir(folder_path)
-        files = sorted(
-            [f for f in files if f.endswith('.json')],
-            key=lambda x: int(x.split('.')[0]) if x.split('.')[0].isdigit() else 999
-        )
-        for filename in files:
-            filepath = os.path.join(folder_path, filename)
-            data = load_json(filepath)
-            all_hadiths.extend(data.get('hadiths', []))
+    # التحقق من وجود الملف في المسار الرئيسي أو داخل مجلد data
+    possible_paths = [f'{book_id}.json', f'data/{book_id}.json']
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            data = load_json(path)
+            all_hadiths = data.get('hadiths', [])
+            break
+    else:
+        if os.path.isdir(book_id):
+            folder_path = book_id
+            files = os.listdir(folder_path)
+            files = sorted(
+                [f for f in files if f.endswith('.json')],
+                key=lambda x: int(x.split('.')[0]) if x.split('.')[0].isdigit() else 999
+            )
+            for filename in files:
+                filepath = os.path.join(folder_path, filename)
+                data = load_json(filepath)
+                all_hadiths.extend(data.get('hadiths', []))
 
     loaded_books_cache[book_id] = all_hadiths
     return all_hadiths
