@@ -9,7 +9,6 @@ app = Flask(__name__)
 # تم تعديل المسارات لتشير إلى مجلد data بناءً على هيكل مستودعك
 QURAN_PATH = 'data/quran.json'
 TAFSIR_PATH = 'data/tafsir_saadi.json'
-
 def load_json(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
