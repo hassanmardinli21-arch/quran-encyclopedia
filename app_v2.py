@@ -6,8 +6,8 @@ from flask import Flask, render_template_string, request, jsonify
 app = Flask(__name__)
 
 # ==================== 1. تحميل القرآن والتفسير ====================
-QURAN_PATH = 'data/quran.json'
-TAFSIR_PATH = 'data/tafsir_saadi.json'
+QURAN_PATH = 'quran.json'
+TAFSIR_PATH = 'tafsir_saadi.json'
 def load_json(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
