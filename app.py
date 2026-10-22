@@ -6,8 +6,10 @@ from flask import Flask, render_template_string, request, jsonify
 app = Flask(__name__)
 
 # ==================== 1. تحميل القرآن والتفسير ====================
+# المسارات تشير إلى مجلد data بناءً على هيكل مستودعك
 QURAN_PATH = 'data/quran.json'
 TAFSIR_PATH = 'data/tafsir_saadi.json'
+
 def load_json(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -135,33 +137,26 @@ def load_hadith_book(book_id):
         return loaded_books_cache[book_id]
 
     all_hadiths = []
-    # البحث الشامل في كل المسارات الممكنة لضمان العثور على الملفات
-    possible_paths = [
-        f'{book_id}.json',
-        f'data/{book_id}.json',
-        os.path.join(book_id, f'{book_id}.json'),
-        os.path.join('data', book_id, f'{book_id}.json')
-    ]
+    # التحقق من وجود الملف في المسار الرئيسي أو داخل مجلد data
+    possible_paths = [f'{book_id}.json', f'data/{book_id}.json']
     
-    found = False
     for path in possible_paths:
         if os.path.exists(path):
             data = load_json(path)
             all_hadiths = data.get('hadiths', [])
-            found = True
             break
-            
-    if not found and os.path.isdir(book_id):
-        folder_path = book_id
-        files = os.listdir(folder_path)
-        files = sorted(
-            [f for f in files if f.endswith('.json')],
-            key=lambda x: int(x.split('.')[0]) if x.split('.')[0].isdigit() else 999
-        )
-        for filename in files:
-            filepath = os.path.join(folder_path, filename)
-            data = load_json(filepath)
-            all_hadiths.extend(data.get('hadiths', []))
+    else:
+        if os.path.isdir(book_id):
+            folder_path = book_id
+            files = os.listdir(folder_path)
+            files = sorted(
+                [f for f in files if f.endswith('.json')],
+                key=lambda x: int(x.split('.')[0]) if x.split('.')[0].isdigit() else 999
+            )
+            for filename in files:
+                filepath = os.path.join(folder_path, filename)
+                data = load_json(filepath)
+                all_hadiths.extend(data.get('hadiths', []))
 
     loaded_books_cache[book_id] = all_hadiths
     return all_hadiths
