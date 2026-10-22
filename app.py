@@ -272,7 +272,7 @@ def search_advanced():
     return jsonify(result)
 
 # ==================== 4. HTML Template ====================
-HTML_TEMPLATE = r"""
+HTML_TEMPLATE = request_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -285,6 +285,7 @@ HTML_TEMPLATE = r"""
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root { --main-green: #1a4d2e; --light-green: #e8f5e9; --gold: #c9a961; --bg: #f0f0e8; --text-dark: #1a1a1a; }
         body { font-family: 'Amiri', 'Segoe UI', Tahoma, sans-serif; background: var(--bg); min-height: 100vh; color: var(--text-dark); }
+        .hadith-text, .ayah-line, .tafsir-panel, .search-result-item .res-text { font-family: 'Amiri', 'Traditional Arabic', serif; text-align: right; line-height: 2.2; word-spacing: 2px; letter-spacing: 0; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
         .header { background: var(--main-green); color: white; padding: 15px 20px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); position: sticky; top: 0; z-index: 100; }
         .header h1 { font-size: 26px; color: var(--gold); margin-bottom: 12px; }
         .top-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -292,28 +293,32 @@ HTML_TEMPLATE = r"""
         .top-btn:hover { background: #40916c; }
         .info-bar { background: #2d6a4f; color: white; padding: 12px 20px; border-bottom: 2px solid var(--gold); text-align: center; }
         .info-time { font-size: 28px; font-weight: bold; color: var(--gold); margin-bottom: 5px; font-family: 'Segoe UI', sans-serif; }
+        .info-date { font-size: 15px; margin-bottom: 10px; line-height: 1.9; }
+        .info-date .hijri-date { color: var(--gold); font-weight: bold; font-size: 17px; }
+        .info-date .greg-date { color: #e0f2e9; font-size: 15px; }
+        .info-date .day-name { color: #ffffff; font-weight: bold; font-size: 17px; }
         .prayer-times { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; font-size: 14px; }
         .prayer-item { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; display: flex; align-items: center; gap: 5px; }
         .prayer-item .name { color: var(--gold); font-weight: bold; }
         .prayer-item .time { font-weight: bold; }
-    </style>
-</head>
-<body>
-<div class="header">
-    <h1>🕌 الموسوعة الإسلامية الشاملة 📚</h1>
-</div>
-<div class="info-bar">
-    <div class="info-time" id="currentTime">--:--:--</div>
-    <div class="prayer-times">
-        <div class="prayer-item"><span class="name">الفجر</span><span class="time" id="fajrTime">--:--</span></div>
-        <div class="prayer-item"><span class="name">الشروق</span><span class="time" id="sunriseTime">--:--</span></div>
-        <div class="prayer-item"><span class="name">الظهر</span><span class="time" id="dhuhrTime">--:--</span></div>
-        <div class="prayer-item"><span class="name">العصر</span><span class="time" id="asrTime">--:--</span></div>
-    </div>
-</div>
-</body>
-</html>
-"""
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        .search-area { display: flex; gap: 6px; max-width: 1000px; margin: 12px auto 0; align-items: center; flex-wrap: wrap; }
+        .search-area input { flex: 1; padding: 10px 15px; border-radius: 8px; border: none; font-size: 15px; font-family: inherit; min-width: 180px; }
+        .search-area select { padding: 10px 12px; border-radius: 8px; border: none; font-size: 14px; font-family: inherit; background: white; cursor: pointer; min-width: 170px; }
+        .search-area button { background: var(--gold); border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; font-family: inherit; white-space: nowrap; }
+        .search-area button:hover { background: #b8935a; }
+        .search-area button.adv-btn { background: #27ae60; }
+        .text-controls { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px; background: #f5f5f0; border-bottom: 2px solid #ddd; flex-wrap: wrap; }
+        .text-controls button { background: var(--main-green); color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; font-family: inherit; }
+        .text-controls .size-display { background: white; padding: 6px 14px; border-radius: 6px; font-weight: bold; border: 1px solid #ccc; min-width: 40px; text-align: center; }
+        .books-bar { background: var(--main-green); padding: 10px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+        .books-bar::-webkit-scrollbar { height: 8px; }
+        .books-bar::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
+        .book-btn { display: inline-block; background: white; color: var(--main-green); border: 2px solid white; padding: 8px 16px; margin: 0 4px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold; font-family: inherit; transition: all 0.2s; }
+        .book-btn:hover { background: #e8f5e9; }
+        .book-btn.active { background: var(--gold); color: white; border-color: var(--gold); }
+        .content-area { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+        .hadith-card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 2px solid #d4d4d0; margin-bottom: 20px; }
+        .hadith-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--light-green); padding-bottom: 10px; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .hadith-book-name { color: var(--main-green); font-size: 18px; font-weight: bold; }
+        .hadith-number { background: var(--main-green); color: white; padding: 5px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+        .narr
