@@ -6,7 +6,7 @@ from flask import Flask, render_template_string, request, jsonify
 app = Flask(__name__)
 
 # ==================== 1. تحميل القرآن والتفسير ====================
-# المسارات الآن تشير إلى المجلد الرئيسي مباشرة
+# المسارات الآن تشير إلى المجلد الرئيسي مباشرة (بدون مجلد data)
 QURAN_PATH = 'quran.json'
 TAFSIR_PATH = 'tafsir_saadi.json'
 
@@ -137,7 +137,7 @@ def load_hadith_book(book_id):
         return loaded_books_cache[book_id]
 
     all_hadiths = []
-    # البحث الآن يقتصر على المجلد الرئيسي (الذي يحتوي على app.py) لجميع الملفات
+    # البحث الآن يقتصر على المجلد الرئيسي لجميع الملفات
     possible_paths = [f'{book_id}.json']
     
     for path in possible_paths:
