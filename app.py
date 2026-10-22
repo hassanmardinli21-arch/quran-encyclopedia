@@ -1,22 +1,26 @@
 import os
 import re
 import json
+from pathlib import Path
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
+# تحديد المسار الأساسي للمشروع لضمان قراءة الملفات بشكل صحيح
+BASE_DIR = Path(__file__).resolve().parent
+
 # ==================== 1. تحميل القرآن والتفسير ====================
-# المسارات الآن تشير إلى المجلد الرئيسي مباشرة (بدون مجلد data)
 QURAN_PATH = 'quran.json'
 TAFSIR_PATH = 'tafsir_saadi.json'
 
 def load_json(filepath):
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        full_path = BASE_DIR / filepath
+        with open(full_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
         print(f"Error loading {filepath}: {e}")
-        return []
+        return None
 
 quran_data = load_json(QURAN_PATH)
 tafsir_list = load_json(TAFSIR_PATH)
@@ -132,22 +136,78 @@ BOOKS = {
 
 loaded_books_cache = {}
 
+# ==================== دالة تحميل الكتب المحسنة ====================
 def load_hadith_book(book_id):
     if book_id in loaded_books_cache:
         return loaded_books_cache[book_id]
 
-    all_hadiths = []
-    # البحث الآن يقتصر على المجلد الرئيسي لجميع الملفات
-    possible_paths = [f'{book_id}.json']
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            data = load_json(path)
-            all_hadiths = data.get('hadiths', [])
-            break
+    path = BASE_DIR / f"{book_id}.json"
 
-    loaded_books_cache[book_id] = all_hadiths
-    return all_hadiths
+    if not path.is_file():
+        print(f"ملف الكتاب غير موجود: {path}")
+        loaded_books_cache[book_id] = []
+        return []
+
+    try:
+        with path.open("r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            records = data
+        elif isinstance(data, dict):
+            records = data.get("hadiths")
+
+            if not isinstance(records, list):
+                for key in ("data", "results", "records"):
+                    if isinstance(data.get(key), list):
+                        records = data[key]
+                        break
+
+            if not isinstance(records, list):
+                records = []
+        else:
+            records = []
+
+        normalized = []
+
+        for i, item in enumerate(records):
+            if not isinstance(item, dict):
+                continue
+
+            arabic = (
+                item.get("arabic")
+                or item.get("text")
+                or item.get("hadith")
+                or item.get("text_ar")
+                or ""
+            )
+
+            if isinstance(arabic, dict):
+                arabic = arabic.get("text", "")
+
+            if not isinstance(arabic, str) or not arabic.strip():
+                continue
+
+            entry = dict(item)
+            entry["arabic"] = arabic
+            entry["idInBook"] = item.get(
+                "idInBook",
+                item.get("id", i + 1)
+            )
+
+            if not isinstance(entry.get("english"), dict):
+                entry["english"] = {}
+
+            normalized.append(entry)
+
+        print(f"تم تحميل {BOOKS[book_id]}: {len(normalized)} حديث")
+        loaded_books_cache[book_id] = normalized
+        return normalized
+
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"خطأ في قراءة {path.name}: {e}")
+        loaded_books_cache[book_id] = []
+        return []
 
 # ==================== 3. المسارات ====================
 @app.route('/')
