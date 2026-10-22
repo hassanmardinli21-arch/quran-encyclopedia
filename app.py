@@ -322,5 +322,6 @@ HTML_TEMPLATE = request_html = """
         .hadith-book-name { color: var(--main-green); font-size: 18px; font-weight: bold; }
         .hadith-number { background: var(--main-green); color: white; padding: 5px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; }
         .narr
-        if __name__ == '__main__':
-    app.run(debug=True)
+      if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
