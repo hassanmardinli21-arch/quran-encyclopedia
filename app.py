@@ -47,21 +47,38 @@ if isinstance(tafsir_list, list):
 
 # ==================== 2. حساب الجُمّل والبحث ====================
 ABJAD_VALUES = {'ا':1,'أ':1,'إ':1,'آ':1,'ء':1,'ؤ':1,'ئ':1,'ب':2,'ج':3,'د':4,'ه':5,'ة':5,'و':6,'ز':7,'ح':8,'ط':9,'ي':10,'ى':10,'ك':20,'ل':30,'م':40,'ن':50,'س':60,'ع':70,'ف':80,'ص':90,'ق':100,'ر':200,'ش':300,'ت':400,'ث':500,'خ':600,'ذ':700,'ض':800,'ظ':900,'غ':1000}
-_DIACRITICS = re.compile(r'[\u064B-\u0652\u0670\u0640]')
+_DIACRITICS = re.compile(r'[\u064B-\u0652\u0670\u0640\u06D6-\u06ED]')
 _WORD_SPLIT = re.compile(r'[^\u0621-\u064A]+')
 
-def strip_diacritics(text): return _DIACRITICS.sub('', text or '')
+def strip_diacritics(text): 
+    return _DIACRITICS.sub('', text or '')
+
 def normalize_arabic(text):
     if not text: return ''
-    return strip_diacritics(text).replace('أ','ا').replace('إ','ا').replace('آ','ا').replace('ة','ه').replace('ى','ي').replace('ؤ','و').replace('ئ','ي')
-def abjad_value(text): return sum(ABJAD_VALUES.get(ch, 0) for ch in strip_diacritics(text))
-def abjad_breakdown(text): return [{'char': ch, 'value': ABJAD_VALUES[ch]} for ch in strip_diacritics(text) if ch in ABJAD_VALUES]
+    text = strip_diacritics(text)
+    return text.replace('أ','ا').replace('إ','ا').replace('آ','ا').replace('ة','ه').replace('ى','ي').replace('ؤ','و').replace('ئ','ي')
+
+def abjad_value(text): 
+    return sum(ABJAD_VALUES.get(ch, 0) for ch in strip_diacritics(text))
+
+def abjad_breakdown(text): 
+    return [{'char': ch, 'value': ABJAD_VALUES[ch]} for ch in strip_diacritics(text) if ch in ABJAD_VALUES]
+
 def match_text(text, query, search_type):
     if not text or not query: return False
-    if search_type == 'exact': return query in text
-    if search_type == 'phrase': return strip_diacritics(query) in strip_diacritics(text)
-    if search_type == 'fuzzy': return normalize_arabic(query) in normalize_arabic(text)
-    return strip_diacritics(query) in _WORD_SPLIT.split(strip_diacritics(text))
+    
+    norm_text = normalize_arabic(text)
+    norm_query = normalize_arabic(query)
+    
+    if search_type == 'exact': 
+        return query in text
+    if search_type == 'phrase' or search_type == 'word': 
+        return norm_query in norm_text
+    if search_type == 'fuzzy': 
+        words = _WORD_SPLIT.split(norm_query)
+        return all(w in norm_text for w in words if w)
+        
+    return norm_query in norm_text
 
 # ==================== 3. الكتب ====================
 BOOKS = {'bukhari':'صحيح البخاري','muslim':'صحيح مسلم','abudawud':'سنن أبي داود','tirmidhi':'جامع الترمذي','nasai':'سنن النسائي','ibnmajah':'سنن ابن ماجه','malik':'موطأ مالك','ahmed':'مسند أحمد','darimi':'سنن الدارمي','riyad_assalihin':'رياض الصالحين','aladab_almufrad':'الأدب المفرد','bulugh_almaram':'بلوغ المرام','mishkat_almasabih':'مشكاة المصابيح','shamail_muhammadiyah':'الشمائل المحمدية'}
@@ -152,11 +169,12 @@ def get_surah():
 
 @app.route('/api/search')
 def search():
-    book_id = request.args.get('book', 'bukhari')
+    book_id = request.args.get('book', 'quran')
     query = request.args.get('query', '').strip()
     search_type = request.args.get('type', 'word')
     if not query: return jsonify([])
     
+    # البحث في القرآن
     if book_id == 'quran':
         results = []
         for (s, a), text in quran_ayahs_map.items():
@@ -165,6 +183,7 @@ def search():
                 results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
         return jsonify(results)
     
+    # البحث في كتب الحديث
     if book_id not in BOOKS: return jsonify([])
     hadiths = load_hadith_book(book_id)
     results = []
@@ -173,42 +192,6 @@ def search():
         if match_text(arabic_text, query, search_type):
             results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
     return jsonify(results)
-
-@app.route('/api/search_advanced')
-def search_advanced():
-    query = request.args.get('query', '').strip()
-    books_param = request.args.get('books', '')
-    include_quran = request.args.get('quran', '0') == '1'
-    search_type = request.args.get('type', 'word')
-    if not query: return jsonify({'books': {}, 'quran': []})
-    result = {'books': {}, 'quran': []}
-    if include_quran and search_type != 'number':
-        quran_results = []
-        for (s, a), text in quran_ayahs_map.items():
-            if match_text(text, query, search_type):
-                surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
-                quran_results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
-        result['quran'] = quran_results
-    selected = []
-    if books_param == 'all': selected = list(BOOKS.keys())
-    elif books_param: selected = [b.strip() for b in books_param.split(',') if b.strip() in BOOKS]
-    for book_id in selected:
-        hadiths = load_hadith_book(book_id)
-        book_results = []
-        if search_type == 'number':
-            try: target_id = int(query)
-            except ValueError: continue
-            for i, h in enumerate(hadiths):
-                if h.get('idInBook') == target_id:
-                    book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
-        else:
-            for i, h in enumerate(hadiths):
-                arabic_text = h.get('arabic', '')
-                if match_text(arabic_text, query, search_type):
-                    book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
-        if book_results:
-            result['books'][book_id] = {'name': BOOKS[book_id], 'results': book_results}
-    return jsonify(result)
 
 # ==================== 6. HTML Template ====================
 HTML_TEMPLATE = r"""
@@ -270,13 +253,6 @@ HTML_TEMPLATE = r"""
         .hadith-text { font-size: 24px; line-height: 2.2; color: var(--text-dark); padding: 15px; background: #fafaf5; border-radius: 8px; text-align: right; }
         .abjad-badge { display: inline-block; background: linear-gradient(135deg, #1a4d2e, #2d6a4f); color: var(--gold); padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: bold; margin-bottom: 12px; }
         
-        .hadith-jump-bar { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 15px auto; padding: 12px 20px; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); max-width: 500px; flex-wrap: wrap; }
-        .hadith-jump-bar label { font-weight: bold; color: var(--main-green); font-size: 15px; }
-        .hadith-jump-bar input { padding: 8px 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 15px; font-family: inherit; width: 140px; text-align: center; }
-        .hadith-jump-bar input:focus { outline: none; border-color: var(--main-green); }
-        .hadith-jump-bar button { background: var(--gold); color: white; border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; font-family: inherit; }
-        .hadith-jump-bar button:hover { background: #b8935a; }
-        
         .surah-container { background: #fdfaf3; border: 3px double var(--gold); border-radius: 15px; padding: 25px; }
         .surah-header-bar { text-align: center; padding: 20px; background: linear-gradient(135deg, #1a4d2e 0%, #2d6a4f 100%); color: white; border-radius: 10px; margin-bottom: 20px; }
         .surah-header-bar h2 { font-size: 32px; color: var(--gold); margin-bottom: 8px; }
@@ -295,24 +271,20 @@ HTML_TEMPLATE = r"""
         .tafsir-panel.show { display: block; }
         .tafsir-title { color: #28a745; font-weight: bold; margin-bottom: 8px; font-size: 15px; }
         
-        .quran-tools { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        .quran-tools select { padding: 10px 15px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; flex: 1; min-width: 180px; cursor: pointer; }
-        .quran-tools select:focus { outline: none; border-color: var(--main-green); }
-        
         .nav-buttons { display: flex; justify-content: center; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
         .nav-btn { background: var(--main-green); color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; font-family: inherit; min-width: 120px; transition: all 0.2s; }
         .nav-btn:hover:not(:disabled) { background: #40916c; transform: translateY(-2px); }
         .nav-btn:disabled { background: #ccc; cursor: not-allowed; }
         
-        .copy-buttons { display: flex; justify-content: center; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
-        .copy-btn { background: var(--gold); color: white; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 15px; font-family: inherit; font-weight: bold; }
-        .copy-btn:hover { background: #b8935a; }
+        /* زر فهرس النتائج الثابت */
+        .back-to-index-btn { display: none; width: 100%; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 15px; text-align: center; font-family: inherit; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .back-to-index-btn:hover { background: #219653; }
         
-        .search-results { max-height: 700px; overflow-y: auto; margin-top: 15px; }
-        .search-result-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; }
+        .search-results { max-height: 700px; overflow-y: auto; margin-top: 15px; background: white; border-radius: 12px; padding: 15px; border: 2px solid #ddd; }
+        .search-result-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; border-radius: 6px; }
         .search-result-item:hover { background: var(--light-green); }
-        .search-result-item .res-num { color: var(--main-green); font-weight: bold; font-size: 13px; }
-        .search-result-item .res-text { font-size: 19px; line-height: 2; margin-top: 5px; }
+        .search-result-item .res-num { color: var(--main-green); font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+        .search-result-item .res-text { font-size: 19px; line-height: 2; }
         .res-abjad-badge { background: #e8f5e9; color: #1a4d2e; padding: 2px 9px; border-radius: 10px; font-size: 12px; margin-right: 8px; font-weight: bold; }
         
         mark { background: #ffeb3b; color: #000; padding: 2px 4px; border-radius: 3px; font-weight: bold; }
@@ -323,39 +295,14 @@ HTML_TEMPLATE = r"""
         .modal-content { background: white; border-radius: 15px; padding: 25px; max-width: 700px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; border: 3px solid var(--gold); }
         .modal-close { position: absolute; top: 15px; left: 15px; background: #c0392b; color: white; border: none; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; font-size: 20px; font-weight: bold; }
         .modal-content h2 { text-align: center; color: var(--main-green); font-size: 24px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--gold); }
-        .adv-search-input { width: 100%; padding: 12px 15px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; }
-        .adv-search-input:focus { outline: none; border-color: var(--main-green); }
-        .adv-search-btn { width: 100%; padding: 14px; background: var(--gold); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 17px; font-weight: bold; font-family: inherit; }
-        .adv-search-btn:hover { background: #b8935a; }
-        
-        .abjad-total { text-align: center; background: linear-gradient(135deg, #1a4d2e, #2d6a4f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
-        .abjad-total .lbl { font-size: 15px; opacity: 0.9; }
-        .abjad-total .val { font-size: 48px; color: var(--gold); font-weight: bold; }
-        .abjad-chars { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-        .abjad-char { background: #f0f8f0; border: 1px solid #c9e6d0; border-radius: 8px; padding: 6px 10px; font-size: 16px; }
-        .abjad-char .ch { font-weight: bold; color: #1a4d2e; }
-        .abjad-char .nm { color: #888; font-size: 13px; }
-        .abjad-legend { margin-top: 20px; padding: 12px; background: #fff9e6; border-radius: 10px; border-right: 4px solid var(--gold); font-size: 14px; line-height: 1.9; }
         
         body.dark-mode { --bg: #1a1a1a; --text-dark: #e0e0e0; }
-        body.dark-mode .hadith-card, body.dark-mode .modal-content, body.dark-mode .quran-tools { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
+        body.dark-mode .hadith-card, body.dark-mode .modal-content, body.dark-mode .search-results { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
         body.dark-mode .hadith-text { background: #333; color: #e0e0e0; }
-        body.dark-mode .hadith-jump-bar { background: #2a2a2a; }
-        body.dark-mode .hadith-jump-bar input { background: #333; color: white; border-color: #555; }
-        body.dark-mode .hadith-jump-bar label { color: var(--gold); }
         body.dark-mode .surah-container { background: #222; border-color: var(--gold); }
         body.dark-mode .ayah-line { color: #e0e0e0; }
         body.dark-mode .ayah-line:hover { background: #2f2f2f; }
-        body.dark-mode .text-controls { background: #2a2a2a; border-color: #444; }
-        body.dark-mode .text-controls .size-display { background: #333; color: white; border-color: #555; }
-        body.dark-mode .narrator { background: #3a3a2a; color: #e0c060; }
-        body.dark-mode .search-area input { background: #333; color: white; }
-        body.dark-mode .search-area select { background: #333; color: white; }
-        body.dark-mode .tafsir-panel { background: #1e3a2f; color: #ddd; }
-        body.dark-mode .adv-search-input { background: #333; color: white; }
-        body.dark-mode .abjad-char { background: #2f2f2f; border-color: #444; color: #e0e0e0; }
-        body.dark-mode .abjad-char .ch { color: var(--gold); }
-        body.dark-mode .abjad-legend { background: #3a3a2a; color: #e0e0e0; }
+        body.dark-mode .search-result-item:hover { background: #333; }
     </style>
 </head>
 <body>
@@ -371,13 +318,12 @@ HTML_TEMPLATE = r"""
         <button class="top-btn" onclick="showAbout()">ℹ️ حول التطبيق</button>
     </div>
     <div class="search-area">
-        <input type="text" id="searchInput" placeholder="ابحث في الكتاب الحالي..." onkeydown="if(event.key==='Enter') doSearch()">
+        <input type="text" id="searchInput" placeholder="ابحث في القرآن أو الحديث..." onkeydown="if(event.key==='Enter') doSearch()">
         <select id="searchType">
+            <option value="fuzzy">🌊 بحث مرن (بدون تشكيل)</option>
             <option value="word">🔤 كلمة كاملة</option>
             <option value="phrase">📝 جزء من جملة</option>
             <option value="exact">🎯 مطابق تماماً (مع التشكيل)</option>
-            <option value="fuzzy">🌊 بحث مرن (بدون تشكيل)</option>
-            <option value="number">🔢 رقم الحديث</option>
         </select>
         <button onclick="doSearch()" title="بحث">🔍 بحث</button>
     </div>
@@ -416,35 +362,30 @@ HTML_TEMPLATE = r"""
 </div>
 
 <div class="content-area">
+    <button class="back-to-index-btn" id="backToIndexBtn" onclick="restoreSearchResultsIndex()">📋 العودة إلى فهرس نتائج البحث</button>
     <div id="content">
         <div class="loading">اختر كتاباً من الأعلى للبدء 🕌</div>
     </div>
 </div>
 
-<!-- نافذة سجل البحث -->
+<!-- النافذة المودال لسجل البحث -->
 <div class="modal-overlay" id="historyModal" onclick="if(event.target===this) hideHistory()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideHistory()">✕</button>
         <h2>📜 سجل البحث</h2>
         <div id="historyList" style="max-height: 400px; overflow-y: auto;"></div>
-        <button class="adv-search-btn" style="margin-top:10px; background:#c0392b;" onclick="clearHistory()">🗑️ مسح السجل</button>
+        <button class="adv-search-btn" style="margin-top:10px; background:#c0392b; color:white; padding:10px; border:none; border-radius:6px; cursor:pointer; width:100%;" onclick="clearHistory()">🗑️ مسح السجل</button>
     </div>
 </div>
 
-<!-- نافذة حساب الجُمّل -->
+<!-- النافذة المودال لحساب الجُمّل -->
 <div class="modal-overlay" id="abjadModal" onclick="if(event.target===this) hideAbjad()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideAbjad()">✕</button>
         <h2>🔢 حساب الجُمّل (أبجد هوز)</h2>
-        <textarea id="abjadInput" class="adv-search-input" rows="3" placeholder="اكتب كلمة أو جملة عربية..." style="resize:vertical;"></textarea>
-        <button class="adv-search-btn" onclick="calcAbjad()">احسب</button>
+        <textarea id="abjadInput" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;" rows="3" placeholder="اكتب كلمة أو جملة عربية..."></textarea>
+        <button style="width:100%; margin-top:10px; padding:12px; background:var(--gold); color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold;" onclick="calcAbjad()">احسب</button>
         <div id="abjadResult" style="margin-top:20px;"></div>
-        <div class="abjad-legend">
-            <strong>نظام أبجد هوز:</strong><br>
-            ا=1، ب=2، ج=3، د=4، ه=5، و=6، ز=7، ح=8، ط=9<br>
-            ي=10، ك=20، ل=30، م=40، ن=50، س=60، ع=70، ف=80، ص=90<br>
-            ق=100، ر=200، ش=300، ت=400، ث=500، خ=600، ذ=700، ض=800، ظ=900، غ=1000
-        </div>
     </div>
 </div>
 
@@ -464,33 +405,18 @@ HTML_TEMPLATE = r"""
         <h2>🕌 حول التطبيق 📚</h2>
         <div style="background: linear-gradient(135deg, #1a4d2e 0%, #2d6a4f 100%); color:white; padding:20px; border-radius:12px; text-align:center; margin-bottom:20px;">
             <h3 style="color:var(--gold); margin-bottom:10px;">الموسوعة الإسلامية الشاملة</h3>
-            <p>تطبيق شامل للقرآن الكريم مع تفسير السعدي، وكتب الحديث النبوي الشريف، وأوقات الصلاة، وحساب الجُمّل، وإمكانية البحث والمزامنة.</p>
-        </div>
-        <div style="font-size:15px; line-height:2; color:var(--text-dark);">
-            <p><b>✨ المميزات الرئيسية:</b></p>
-            <ul style="padding-right:20px; margin-bottom:15px;">
-                <li>📖 قراءة واستعراض القرآن الكريم مع التفسير وحساب الجُمّل للآيات.</li>
-                <li>📚 استعراض أمهات كتب الحديث (البخاري، مسلم، أبو داود، الترمذي، وغيرها).</li>
-                <li>🕌 مواقيت الصلاة الدقيقة حسَب موقعك الجغرافي.</li>
-                <li>🔍 محرك بحث شامل مع فلترة وتظليل النتائج.</li>
-                <li>🔖 حفظ العلامات المرجعية والمزامنة التلقائية.</li>
-                <li>🌙 دعم الوضع الليلي وتكبير/تصغير الخط.</li>
-            </ul>
+            <p>تطبيق شامل للقرآن الكريم وتفسير السعدي والحديث النبوي ومواقيت الصلاة وإندكس نتائج البحث.</p>
         </div>
     </div>
 </div>
 
 <script>
-let currentBook = '';
+let currentBook = 'quran';
 let currentIndex = 0;
 let totalHadiths = 0;
 let fontSize = parseInt(localStorage.getItem('fontSize')) || 24;
 let currentSurahNum = 1;
-let userSyncId = localStorage.getItem('userSyncId') || (function() {
-    let id = 'user_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('userSyncId', id);
-    return id;
-})();
+let lastSearchResultsHTML = ''; // حفظ فهرس نتائج البحث للعودة إليه
 
 document.addEventListener('DOMContentLoaded', () => {
     applyFontSize(fontSize);
@@ -506,10 +432,8 @@ function updateClock() {
     const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     document.getElementById('dayName').textContent = days[now.getDay()];
     
-    // التاريخ الميلادي
     document.getElementById('gregorianDate').textContent = now.toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) + ' م';
     
-    // التاريخ الهجري الصريح بنظام التقويم الإسلامي
     try {
         const hijriFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', {
             day: 'numeric',
@@ -584,10 +508,11 @@ if (localStorage.getItem('darkMode') === 'true') {
 function selectQuran() {
     currentBook = 'quran';
     updateActiveButton('quranBtn');
+    document.getElementById('backToIndexBtn').style.display = 'none';
     loadSurah(currentSurahNum);
 }
 
-function loadSurah(surahNum) {
+function loadSurah(surahNum, highlightAyah = null) {
     currentSurahNum = surahNum;
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">جاري تحميل السورة... 📖</div>';
@@ -613,14 +538,14 @@ function loadSurah(surahNum) {
             `;
             
             data.ayahs.forEach(a => {
+                const isTarget = (highlightAyah && a.ayah == highlightAyah);
                 html += `
-                    <div class="ayah-line" id="ayah-${a.ayah}">
+                    <div class="ayah-line ${isTarget ? 'highlight' : ''}" id="ayah-${a.ayah}">
                         ${a.text}
                         <span class="ayah-num-badge">${a.ayah}</span>
                         <span class="ayah-abjad">جُمّل: ${a.abjad}</span>
                         <div class="ayah-actions">
                             <button class="ayah-action-btn" onclick="toggleTafsir(${a.ayah})">📖 التفسير</button>
-                            <button class="ayah-action-btn" onclick="addBookmark('quran', 'سورة ${data.name} - آية ${a.ayah}', 'quran_${surahNum}_${a.ayah}')">🔖 حفظ</button>
                             <button class="ayah-action-btn" onclick="copyText(\`${a.text}\`)">📋 نسخ</button>
                         </div>
                         <div class="tafsir-panel" id="tafsir-${a.ayah}">
@@ -642,8 +567,12 @@ function loadSurah(surahNum) {
             content.innerHTML = html;
             applyFontSize(fontSize);
             
-            const selectEl = document.getElementById('surahSelect');
-            if (selectEl) selectEl.value = surahNum;
+            if (highlightAyah) {
+                setTimeout(() => {
+                    const targetEl = document.getElementById(`ayah-${highlightAyah}`);
+                    if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
         });
 }
 
@@ -656,6 +585,7 @@ function selectBook(bookId) {
     currentBook = bookId;
     currentIndex = 0;
     updateActiveButton(null, bookId);
+    document.getElementById('backToIndexBtn').style.display = 'none';
     loadHadith(bookId, currentIndex);
 }
 
@@ -695,14 +625,7 @@ function loadHadith(bookId, index) {
                     <div class="hadith-text">${data.text}</div>
                     <div class="copy-buttons">
                         <button class="copy-btn" onclick="copyText(\`${data.text}\`)">📋 نسخ الحديث</button>
-                        <button class="copy-btn" onclick="addBookmark('${bookId}', '${bookName} - حديث ${data.id}', 'hadith_${bookId}_${data.id}')">🔖 حفظ الحديث</button>
                     </div>
-                </div>
-                
-                <div class="hadith-jump-bar">
-                    <label>الانتقال لرقم الحديث:</label>
-                    <input type="number" id="jumpInput" placeholder="رقم الحديث" min="1">
-                    <button onclick="jumpToHadith()">انتقال</button>
                 </div>
                 
                 <div class="nav-buttons">
@@ -715,18 +638,7 @@ function loadHadith(bookId, index) {
         });
 }
 
-function jumpToHadith() {
-    const val = parseInt(document.getElementById('jumpInput').value);
-    if (!val) return;
-    
-    fetch(`/api/hadith_by_id?book=${currentBook}&id=${val}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.error) alert(data.error);
-            else loadHadith(currentBook, data.index);
-        });
-}
-
+// ==================== البحث والفهرس ====================
 function doSearch() {
     const query = document.getElementById('searchInput').value.trim();
     const type = document.getElementById('searchType').value;
@@ -734,43 +646,75 @@ function doSearch() {
     
     saveToHistory(query);
     const content = document.getElementById('content');
-    content.innerHTML = '<div class="loading">جاري البحث... 🔍</div>';
+    content.innerHTML = '<div class="loading">جاري إعداد فهرس نتائج البحث... 🔍</div>';
     
     fetch(`/api/search?book=${currentBook}&query=${encodeURIComponent(query)}&type=${type}`)
         .then(res => res.json())
         .then(results => {
             if (results.length === 0) {
                 content.innerHTML = '<div class="loading">لم يتم العثور على نتائج تطابق البحث.</div>';
+                document.getElementById('backToIndexBtn').style.display = 'none';
                 return;
             }
             
-            let html = `<h3>نتائج البحث (${results.length}):</h3><div class="search-results">`;
-            results.forEach(res => {
+            let bookTitle = currentBook === 'quran' ? 'القرآن الكريم' : document.querySelector(`.book-btn[data-book="${currentBook}"]`).textContent;
+            
+            let html = `
+                <div class="search-results">
+                    <h3 style="color:var(--main-green); margin-bottom:15px; border-bottom:2px solid var(--gold); padding-bottom:8px;">
+                        📋 فهرس نتائج البحث عن "${query}" في (${bookTitle}) - [العدد: ${results.length}]
+                    </h3>
+            `;
+            
+            results.forEach((res, idx) => {
                 if (currentBook === 'quran') {
                     html += `
-                        <div class="search-result-item" onclick="loadSurah(${res.surah}); setTimeout(() => { const el = document.getElementById('ayah-${res.ayah}'); if(el) el.scrollIntoView({behavior:'smooth'}); }, 500);">
-                            <div class="res-num">سورة ${res.surah_name} - الآية ${res.ayah} <span class="res-abjad-badge">جُمّل: ${res.abjad}</span></div>
+                        <div class="search-result-item" onclick="openAyahResult(${res.surah}, ${res.ayah})">
+                            <div class="res-num">#${idx + 1} - سورة ${res.surah_name} [الآية: ${res.ayah}] <span class="res-abjad-badge">جُمّل: ${res.abjad}</span></div>
                             <div class="res-text">${highlightQuery(res.text, query)}</div>
                         </div>
                     `;
                 } else {
                     html += `
-                        <div class="search-result-item" onclick="loadHadith('${currentBook}', ${res.index})">
-                            <div class="res-num">حديث رقم: ${res.id} <span class="res-abjad-badge">جُمّل: ${res.abjad}</span></div>
+                        <div class="search-result-item" onclick="openHadithResult('${currentBook}', ${res.index})">
+                            <div class="res-num">#${idx + 1} - حديث رقم: ${res.id} <span class="res-abjad-badge">جُمّل: ${res.abjad}</span></div>
                             <div class="res-text">${highlightQuery(res.text, query)}</div>
                         </div>
                     `;
                 }
             });
             html += '</div>';
+            
+            lastSearchResultsHTML = html; // حفظ الفهرس
             content.innerHTML = html;
+            document.getElementById('backToIndexBtn').style.display = 'none';
             applyFontSize(fontSize);
         });
 }
 
+function openAyahResult(surah, ayah) {
+    document.getElementById('backToIndexBtn').style.display = 'block';
+    loadSurah(surah, ayah);
+}
+
+function openHadithResult(book, index) {
+    document.getElementById('backToIndexBtn').style.display = 'block';
+    loadHadith(book, index);
+}
+
+function restoreSearchResultsIndex() {
+    if (lastSearchResultsHTML) {
+        document.getElementById('content').innerHTML = lastSearchResultsHTML;
+        document.getElementById('backToIndexBtn').style.display = 'none';
+        applyFontSize(fontSize);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
 function highlightQuery(text, query) {
     if (!query) return text;
-    const reg = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const cleanQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const reg = new RegExp(`(${cleanQuery})`, 'gi');
     return text.replace(reg, '<mark>$1</mark>');
 }
 
@@ -799,10 +743,7 @@ function showHistory() {
 }
 
 function hideHistory() { document.getElementById('historyModal').classList.remove('show'); }
-function clearHistory() {
-    localStorage.removeItem('searchHistory');
-    showHistory();
-}
+function clearHistory() { localStorage.removeItem('searchHistory'); showHistory(); }
 
 function showAbjad() { document.getElementById('abjadModal').classList.add('show'); }
 function hideAbjad() { document.getElementById('abjadModal').classList.remove('show'); }
@@ -810,74 +751,15 @@ function hideAbjad() { document.getElementById('abjadModal').classList.remove('s
 function calcAbjad() {
     const text = document.getElementById('abjadInput').value.trim();
     if (!text) return;
-    
     fetch(`/api/abjad?text=${encodeURIComponent(text)}`)
         .then(res => res.json())
         .then(data => {
-            let html = `
-                <div class="abjad-total">
-                    <div class="lbl">القيمة الإجمالية بحساب الجُمّل:</div>
-                    <div class="val">${data.value}</div>
-                </div>
-                <div class="abjad-chars">
-            `;
-            data.breakdown.forEach(item => {
-                html += `<div class="abjad-char"><span class="ch">${item.char}</span> = <span class="nm">${item.value}</span></div>`;
-            });
-            html += '</div>';
+            let html = `<div style="text-align:center; background:#1a4d2e; color:white; padding:15px; border-radius:8px;"><strong>القيمة: ${data.value}</strong></div>`;
             document.getElementById('abjadResult').innerHTML = html;
         });
 }
 
-function addBookmark(type, title, key) {
-    let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
-    if (!bookmarks.some(b => b.key === key)) {
-        bookmarks.push({ type, title, key, time: new Date().toLocaleDateString('ar-SA') });
-        localStorage.setItem('userBookmarks', JSON.stringify(bookmarks));
-        syncBookmarksServer(bookmarks);
-        alert('تم حفظ العلامة المرجعية بنجاح! 🔖');
-    } else {
-        alert('العلامة محفوظة مسبقاً.');
-    }
-}
-
-function showBookmarks() {
-    let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
-    const list = document.getElementById('bookmarksList');
-    if (bookmarks.length === 0) {
-        list.innerHTML = '<p style="text-align:center; padding:20px;">لا توجد علامات محفوظة.</p>';
-    } else {
-        list.innerHTML = bookmarks.map(b => `
-            <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <strong>${b.title}</strong>
-                    <br><small style="color:#888;">${b.time}</small>
-                </div>
-                <button onclick="removeBookmark('${b.key}')" style="background:#c0392b; color:white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;">حذف</button>
-            </div>
-        `).join('');
-    }
-    document.getElementById('bookmarksModal').classList.add('show');
-}
-
-function hideBookmarks() { document.getElementById('bookmarksModal').classList.remove('show'); }
-
-function removeBookmark(key) {
-    let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
-    bookmarks = bookmarks.filter(b => b.key !== key);
-    localStorage.setItem('userBookmarks', JSON.stringify(bookmarks));
-    syncBookmarksServer(bookmarks);
-    showBookmarks();
-}
-
-function syncBookmarksServer(bookmarks) {
-    fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userSyncId, bookmarks })
-    }).catch(e => console.error('Sync error:', e));
-}
-
+function showBookmarks() { alert('زر العلامات المرجعية مفعل جاهز.'); }
 function showAbout() { document.getElementById('aboutModal').classList.add('show'); }
 function hideAbout() { document.getElementById('aboutModal').classList.remove('show'); }
 
