@@ -505,10 +505,18 @@ function updateClock() {
     document.getElementById('currentTime').textContent = now.toLocaleTimeString('ar-SA');
     const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     document.getElementById('dayName').textContent = days[now.getDay()];
-    document.getElementById('gregorianDate').textContent = now.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+    
+    // التاريخ الميلادي
+    document.getElementById('gregorianDate').textContent = now.toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) + ' م';
+    
+    // التاريخ الهجري الصريح بنظام التقويم الإسلامي
     try {
-        const hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-uma', { day: 'numeric', month: 'long', year: 'numeric' }).format(now);
-        document.getElementById('hijriDate').textContent = hijri;
+        const hijriFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+        document.getElementById('hijriDate').textContent = hijriFormatter.format(now) + ' هـ';
     } catch(e) {
         document.getElementById('hijriDate').textContent = '';
     }
