@@ -95,7 +95,7 @@ BOOKS = {
     'malik':'موطأ مالك',
     'ahmed':'مسند أحمد',
     'darimi':'سنن الدارمي',
-    'riyad_assalihin':'رياض الصالصين',
+    'riyad_assalihin':'رياض الصالحين',
     'aladab_almufrad':'الأدب المفرد',
     'bulugh_almaram':'بلوغ المرام',
     'mishkat_almasabih':'مشكاة المصابيح',
@@ -455,7 +455,7 @@ HTML_TEMPLATE = r"""
     </div>
 </div>
 
-<!-- نافذة العلامات والمزامنة المكتملة -->
+<!-- نافذة العلامات والمزامنة الكاملة -->
 <div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideBookmarks()">✕</button>
@@ -463,16 +463,16 @@ HTML_TEMPLATE = r"""
         
         <div class="sync-box">
             <strong style="color:var(--main-green);">⚡ رمز المزامنة الخاص بك:</strong>
-            <p style="font-size:12px; color:#666; margin:4px 0;">انسخ هذا الرمز لاسترجاع حفظك على أي جهاز آخر، أو أدخل رمزك السابق للمزامنة:</p>
+            <p style="font-size:12px; color:#666; margin:4px 0;">أدخل أي رمز خاص بك للمزامنة، أو استعمل الرمز الحالي للربط بين أجهزتك:</p>
             <div class="sync-input-group">
-                <input type="text" id="syncCodeInput" placeholder="أدخل رمز المزامنة...">
-                <button class="sync-btn-action" onclick="applySyncCode()">مزامنة وتطبيق 🔄</button>
+                <input type="text" id="syncCodeInput" placeholder="أدخل رمز المزامنة هنا...">
+                <button class="sync-btn-action" onclick="applySyncCode()">تطبيق وربط 🔄</button>
                 <button class="sync-btn-action" style="background:var(--gold);" onclick="copySyncCode()">نسخ الرمز 📋</button>
             </div>
         </div>
 
         <h3 style="color:var(--main-green); margin-bottom:10px; font-size:18px;">المحفوظات الحالية:</h3>
-        <div id="bookmarksList" style="max-height: 350px; overflow-y: auto;"></div>
+        <div id="bookmarksList" style="max-height: 320px; overflow-y: auto;"></div>
     </div>
 </div>
 
@@ -895,7 +895,7 @@ function highlightQuery(text, query) {
     return text.replace(reg, '<mark>$1</mark>');
 }
 
-// ==================== ميزات المزامنة والعلامات بالكامل ====================
+// ==================== ميزات المزامنة والعلامات المحسنة ====================
 function addBookmark(type, title, key) {
     let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
     if (!bookmarks.some(b => b.key === key)) {
@@ -968,6 +968,7 @@ function copySyncCode() {
     navigator.clipboard.writeText(code).then(() => alert('تم نسخ رمز المزامنة بنجاح! 📋'));
 }
 
+// تعديل دالة تطبيق الكود ومزامנתه للتعامل مع الإدخال والجلب والدمج الفعلي
 function applySyncCode() {
     const newCode = document.getElementById('syncCodeInput').value.trim();
     if (!newCode) {
@@ -977,19 +978,35 @@ function applySyncCode() {
     userSyncId = newCode;
     localStorage.setItem('userSyncId', userSyncId);
     
-    // جلب المحفوظات من السيرفر فوراً باستخدام الكود الجديد
+    let localBookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
+
+    // جلب البيانات من السيرفر للكود المدخل
     fetch(`/api/sync?userId=${encodeURIComponent(userSyncId)}`)
         .then(res => res.json())
         .then(data => {
-            if (data.bookmarks) {
-                localStorage.setItem('userBookmarks', JSON.stringify(data.bookmarks));
+            let serverBookmarks = data.bookmarks || [];
+            if (serverBookmarks.length > 0) {
+                // دمج البيانات (تجنب التكرار بناءً على المفتاح key)
+                let combined = [...localBookmarks];
+                serverBookmarks.forEach(sb => {
+                    if (!combined.some(lb => lb.key === sb.key)) {
+                        combined.push(sb);
+                    }
+                });
+                localStorage.setItem('userBookmarks', JSON.stringify(combined));
+                syncBookmarksServer(combined); // تحديث السيرفر بالنسخة المدمجة
                 renderBookmarksList();
-                alert('تمت المزامنة وجلب العلامات بنجاح! 🔄');
+                alert('تمت المزامنة، جلب العلامات ودمجها بنجاح! 🔄');
             } else {
-                alert('تم تطبيق رمز المزامنة ولكن لا توجد بيانات مسجلة به سابقاً.');
+                // إذا لم تكن هناك بيانات سابقة بهذا الكود على السيرفر، يتم رفع البيانات المحلية إليه
+                syncBookmarksServer(localBookmarks);
+                renderBookmarksList();
+                alert('تم اعتماد رمز المزامنة ورفع المحفوظات الحالية إليه بنجاح! ☁️');
             }
         })
-        .catch(err => alert('حدث خطأ أثناء المزامنة مع السيرفر.'));
+        .catch(err => {
+            alert('حدث خطأ أثناء الاتصال بالسيرفر للمزامنة.');
+        });
 }
 
 function syncBookmarksServer(bookmarks) {
