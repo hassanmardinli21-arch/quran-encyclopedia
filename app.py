@@ -133,16 +133,6 @@ def get_hadith():
     h = hadiths[index]
     return jsonify({'index': index, 'total': len(hadiths), 'id': h.get('idInBook'), 'text': h.get('arabic'), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic'))})
 
-@app.route('/api/hadith_by_id')
-def get_hadith_by_id():
-    book_id = request.args.get('book', 'bukhari')
-    hadith_id = request.args.get('id', 0, type=int)
-    hadiths = load_hadith_book(book_id)
-    for i, h in enumerate(hadiths):
-        if h.get('idInBook') == hadith_id:
-            return jsonify({'index': i, 'total': len(hadiths), 'id': hadith_id, 'text': h.get('arabic'), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic'))})
-    return jsonify({'error': 'الحديث غير موجود'})
-
 @app.route('/api/surah')
 def get_surah():
     surah_num = request.args.get('surah', 1, type=int)
@@ -592,27 +582,30 @@ HTML_TEMPLATE = r"""
     }
 
     // ==================== العلامات ====================
-    function toggleBookmark() {
-        if (!currentBook) { alert('افتح كتاباً أو سورة أولاً'); return; }
-        const key = currentBook + '_' + currentIndex;
+    function toggleBookmark(type, id) {
+        const key = type + '_' + id;
         const exists = bookmarks.find(b => b.key === key);
         if (exists) {
             bookmarks = bookmarks.filter(b => b.key !== key);
             alert('🗑️ تم حذف العلامة');
         } else {
-            bookmarks.push({ key: key, book: currentBook, index: currentIndex, time: Date.now() });
+            bookmarks.push({ key: key, book: type, index: id, time: Date.now() });
             alert('✅ تمت إضافة العلامة');
         }
         saveBookmarks();
-        updateBookmarkButton();
+        updateBookmarkButton(type, id);
     }
 
-    function updateBookmarkButton() {
-        const btn = document.querySelector('.copy-btn[onclick="toggleBookmark()"]');
-        if (!btn || !currentBook) return;
-        const key = currentBook + '_' + currentIndex;
+    function updateBookmarkButton(type, id) {
+        const key = type + '_' + id;
         const exists = bookmarks.find(b => b.key === key);
-        btn.innerText = exists ? '🔖 إزالة العلامة' : '🔖 علامة';
+        if (type === 'quran') {
+            const btn = document.querySelector(`#ayah-${id} .bookmark-btn`);
+            if (btn) btn.innerText = exists ? '🔖 إزالة' : '🔖 علامة';
+        } else {
+            const btn = document.querySelector('.copy-btn[onclick="toggleBookmark(\'' + type + '\', ' + id + ')"]');
+            if (btn) btn.innerText = exists ? '🔖 إزالة العلامة' : '🔖 علامة';
+        }
     }
 
     function showBookmarks() {
@@ -624,9 +617,9 @@ HTML_TEMPLATE = r"""
         }
         let html = '';
         bookmarks.forEach(b => {
-            html += `<div style="padding:10px; border-bottom:1px solid #eee; cursor:pointer;" onclick="hideBookmarks(); ${b.book === 'quran' ? `showSurah(${b.index}).then(()=>scrollToAyah(${b.index}))` : `currentBook='${b.book}'; setActiveBook('${b.book}'); showHadith(${b.index})`}">
+            html += `<div style="padding:10px; border-bottom:1px solid #eee; cursor:pointer;" onclick="hideBookmarks(); ${b.book === 'quran' ? `showSurah(${b.index.split('_')[0]}).then(()=>scrollToAyah(${b.index.split('_')[1]}))` : `currentBook='${b.book}'; setActiveBook('${b.book}'); showHadith(${b.index})`}">
                 <div style="color:var(--main-green); font-weight:bold; font-size:14px;">
-                    ${b.book === 'quran' ? '📖 القرآن - آية ' + b.index : getBookName(b.book) + ' - حديث ' + b.index}
+                    ${b.book === 'quran' ? '📖 القرآن - سورة ' + b.index.split('_')[0] + ' آية ' + b.index.split('_')[1] : getBookName(b.book) + ' - حديث ' + b.index}
                 </div>
                 <div style="color:#888; font-size:12px;">${new Date(b.time).toLocaleString('ar-SA')}</div>
             </div>`;
@@ -805,7 +798,7 @@ HTML_TEMPLATE = r"""
                     ${data.narrator ? `<div class="narrator">🎙️ ${escapeHtml(data.narrator)}</div>` : ''}
                     <div class="abjad-badge">🔢 قيمة الجُمّل: ${abjad}</div>
                     <div class="hadith-text" id="hadithText" style="font-size:${fontSize}px;">${safeHighlight(data.text, currentSearchQuery)}</div>
-                    <div class="copy-buttons"><button class="copy-btn" onclick="copyHadith()">📋 نسخ الحديث</button><button class="copy-btn" onclick="toggleBookmark()">${isBookmarked ? '🔖 إزالة العلامة' : '🔖 علامة'}</button><button class="copy-btn" onclick="showAbjadForCurrentHadith()">🔢 حساب الجُمّل</button></div>
+                    <div class="copy-buttons"><button class="copy-btn" onclick="copyHadith()">📋 نسخ الحديث</button><button class="copy-btn" onclick="toggleBookmark('${currentBook}', ${currentIndex})">${isBookmarked ? '🔖 إزالة العلامة' : '🔖 علامة'}</button><button class="copy-btn" onclick="showAbjadForCurrentHadith()">🔢 حساب الجُمّل</button></div>
                 </div>
                 <div class="hadith-jump-bar"><label>🔢 اذهب إلى حديث رقم:</label><input type="number" id="hadithJumpInput" min="1" max="${data.total}" placeholder="1 - ${data.total}" onkeydown="if(event.key==='Enter') jumpToHadith()"><button onclick="jumpToHadith()">اذهب</button></div>
                 <div class="nav-buttons"><button class="nav-btn" onclick="showHadith(${data.index - 1})" ${data.index === 0 ? 'disabled' : ''}>◀ السابق</button><button class="nav-btn" onclick="showHadith(0)">🏠 الأول</button><button class="nav-btn" onclick="showHadith(${data.index + 1})" ${data.index >= data.total - 1 ? 'disabled' : ''}>التالي ▶</button></div>
@@ -850,11 +843,17 @@ HTML_TEMPLATE = r"""
         if (currentSurah !== 1 && currentSurah !== 9) { ayahsHtml += `<div class="basmala">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>`; }
         data.ayahs.forEach(a => {
             const abjadVal = a.abjad || 0;
+            const isBookmarked = bookmarks.some(b => b.key === 'quran_' + currentSurah + '_' + a.ayah);
             ayahsHtml += `
                 <div class="ayah-line" id="ayah-${a.ayah}" data-ayah="${a.ayah}">
                     <span>${safeHighlight(a.text, currentSearchQuery)}</span>
                     <span class="ayah-num-badge">${a.ayah}</span>
-                    <div class="ayah-actions"><button class="ayah-action-btn" onclick="copyAyah(${a.ayah})">📋 نسخ</button>${a.tafsir ? `<button class="ayah-action-btn" onclick="toggleTafsir(${a.ayah})">📖 التفسير</button>` : ''}<span class="ayah-abjad">🔢 جُمّل: ${abjadVal}</span></div>
+                    <div class="ayah-actions">
+                        <button class="ayah-action-btn" onclick="copyAyah(${a.ayah})">📋 نسخ</button>
+                        <button class="ayah-action-btn bookmark-btn" onclick="toggleBookmark('quran', '${currentSurah}_${a.ayah}')">${isBookmarked ? '🔖 إزالة' : '🔖 علامة'}</button>
+                        ${a.tafsir ? `<button class="ayah-action-btn" onclick="toggleTafsir(${a.ayah})">📖 التفسير</button>` : ''}
+                        <span class="ayah-abjad">🔢 جُمّل: ${abjadVal}</span>
+                    </div>
                     ${a.tafsir ? `<div class="tafsir-panel" id="tafsir-${a.ayah}"><div class="tafsir-title">📖 التفسير (السعدي):</div>${safeHighlight(a.tafsir, currentSearchQuery)}</div>` : ''}
                 </div>`;
         });
