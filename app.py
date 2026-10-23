@@ -34,7 +34,9 @@ if isinstance(quran_data, list):
         surah_num = surah.get('id')
         surahs_list.append({'id': surah_num, 'name': surah.get('name', '')})
         for ayah in surah.get('verses', []):
-            quran_ayahs_map[(surah_num, ayah.get('id'))] = ayah.get('text', '')
+            ayah_id = ayah.get('id') or ayah.get('number', 0)
+            ayah_text = ayah.get('text', '')
+            quran_ayahs_map[(surah_num, ayah_id)] = ayah_text
 
 tafsir_map = {}
 if isinstance(tafsir_list, list):
@@ -45,10 +47,9 @@ if isinstance(tafsir_list, list):
             for ayah in surah_obj.get('ayahs', []):
                 tafsir_map[(surah_num, ayah.get('number', 0))] = ayah.get('text', '')
 
-# ==================== 2. حساب الجُمّل والبحث ====================
+# ==================== 2. حساب الجُمّل والبحث وتطبيع النصوص ====================
 ABJAD_VALUES = {'ا':1,'أ':1,'إ':1,'آ':1,'ء':1,'ؤ':1,'ئ':1,'ب':2,'ج':3,'د':4,'ه':5,'ة':5,'و':6,'ز':7,'ح':8,'ط':9,'ي':10,'ى':10,'ك':20,'ل':30,'م':40,'ن':50,'س':60,'ع':70,'ف':80,'ص':90,'ق':100,'ر':200,'ش':300,'ت':400,'ث':500,'خ':600,'ذ':700,'ض':800,'ظ':900,'غ':1000}
 _DIACRITICS = re.compile(r'[\u064B-\u0652\u0670\u0640\u06D6-\u06ED]')
-_WORD_SPLIT = re.compile(r'[^\u0621-\u064A]+')
 
 def strip_diacritics(text): 
     return _DIACRITICS.sub('', text or '')
@@ -56,7 +57,11 @@ def strip_diacritics(text):
 def normalize_arabic(text):
     if not text: return ''
     text = strip_diacritics(text)
-    return text.replace('أ','ا').replace('إ','ا').replace('آ','ا').replace('ة','ه').replace('ى','ي').replace('ؤ','و').replace('ئ','ي')
+    text = text.replace('ـ', '')
+    text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('إ', 'ا')
+    text = text.replace('ة', 'ه').replace('ى', 'ي')
+    text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
+    return text
 
 def abjad_value(text): 
     return sum(ABJAD_VALUES.get(ch, 0) for ch in strip_diacritics(text))
@@ -72,13 +77,12 @@ def match_text(text, query, search_type):
     
     if search_type == 'exact': 
         return query in text
-    if search_type == 'phrase' or search_type == 'word': 
+    elif search_type == 'word':
+        return norm_query in norm_text.split()
+    elif search_type == 'phrase':
         return norm_query in norm_text
-    if search_type == 'fuzzy': 
-        words = _WORD_SPLIT.split(norm_query)
-        return all(w in norm_text for w in words if w)
-        
-    return norm_query in norm_text
+    else: # fuzzy
+        return norm_query in norm_text
 
 # ==================== 3. الكتب ====================
 BOOKS = {
@@ -265,6 +269,7 @@ HTML_TEMPLATE = r"""
         .top-btn:hover { background: #40916c; }
         .top-btn.adv { background: #27ae60; }
         .top-btn.adv:hover { background: #219653; }
+        .top-btn.sync-btn { background: #c29b38; }
         
         .info-bar { background: #2d6a4f; color: white; padding: 12px 20px; border-bottom: 2px solid var(--gold); text-align: center; }
         .info-time { font-size: 28px; font-weight: bold; color: var(--gold); margin-bottom: 5px; font-family: 'Segoe UI', sans-serif; }
@@ -363,7 +368,7 @@ HTML_TEMPLATE = r"""
         <button class="top-btn" onclick="toggleDark()">🌙 ليلي</button>
         <button class="top-btn" onclick="detectLocation()">📍 تحديد الموقع</button>
         <button class="top-btn adv" onclick="showAdvancedSearch()">🔍 بحث متقدم</button>
-        <button class="top-btn" onclick="showBookmarks()">🔖 علاماتي</button>
+        <button class="top-btn sync-btn" onclick="showBookmarks()">🔖 المزامنة والعلامات</button>
         <button class="top-btn" onclick="showAbjad()">🔢 حساب الجُمّل</button>
         <button class="top-btn" onclick="showHistory()">📜 سجل البحث</button>
         <button class="top-btn" onclick="showAbout()">ℹ️ حول التطبيق</button>
@@ -441,11 +446,12 @@ HTML_TEMPLATE = r"""
     </div>
 </div>
 
-<!-- نافذة العلامات المرجعية -->
+<!-- نافذة العلامات والمزامنة -->
 <div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideBookmarks()">✕</button>
-        <h2>🔖 العلامات المحفوظة</h2>
+        <h2>🔖 العلامات المحفوظة والمزامنة</h2>
+        <p style="font-size:13px; color:#666; margin-bottom:15px; text-align:center;">معرف المستخدم للمزامنة: <code id="userIdDisplay" style="background:#eee; padding:2px 6px; border-radius:4px;"></code></p>
         <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;"></div>
     </div>
 </div>
@@ -478,7 +484,7 @@ HTML_TEMPLATE = r"""
         <h2>🕌 حول التطبيق 📚</h2>
         <div style="background: linear-gradient(135deg, #1a4d2e 0%, #2d6a4f 100%); color:white; padding:20px; border-radius:12px; text-align:center; margin-bottom:20px;">
             <h3 style="color:var(--gold); margin-bottom:10px;">الموسوعة الإسلامية الشاملة</h3>
-            <p>تطبيق شامل ومتقدم للقرآن الكريم، تفسير السعدي، أمهات كتب الحديث النبوي الشريف، أوقات الصلاة، حساب الجُمّل، والفهرس الذكي لنتائج البحث.</p>
+            <p>تطبيق شامل ومتقدم للقرآن الكريم، تفسير السعدي، أمهات كتب الحديث النبوي الشريف، أوقات الصلاة، حساب الجُمّل، والفهرس الذكي لنتائج البحث والمزامنة.</p>
         </div>
     </div>
 </div>
@@ -882,6 +888,7 @@ function addBookmark(type, title, key) {
 }
 
 function showBookmarks() {
+    document.getElementById('userIdDisplay').textContent = userSyncId;
     let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
     const list = document.getElementById('bookmarksList');
     if (bookmarks.length === 0) {
