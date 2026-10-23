@@ -155,7 +155,10 @@ def search():
     book_id = request.args.get('book', 'bukhari')
     query = request.args.get('query', '').strip()
     search_type = request.args.get('type', 'word')
+    
     if not query: return jsonify([])
+    
+    # البحث في القرآن
     if book_id == 'quran':
         results = []
         for (s, a), text in quran_ayahs_map.items():
@@ -163,6 +166,8 @@ def search():
                 surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
                 results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
         return jsonify(results)
+    
+    # البحث في الكتب
     if book_id not in BOOKS: return jsonify([])
     hadiths = load_hadith_book(book_id)
     results = []
@@ -510,21 +515,22 @@ HTML_TEMPLATE = r"""
         content.innerHTML = '<div class="loading">جاري البحث...</div>';
         
         try {
-            const res = await fetch(`/api/search?book=${currentBook || 'quran'}&query=${encodeURIComponent(query)}`);
+            const bookId = currentBook || 'quran';
+            const res = await fetch(`/api/search?book=${bookId}&query=${encodeURIComponent(query)}`);
             const data = await res.json();
             
             if (!Array.isArray(data) || data.length === 0) {
-                content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${query}"</div>`;
+                content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${escapeHtml(query)}"</div>`;
                 return;
             }
             
-            let html = `<div class="hadith-card"><div class="hadith-header"><span class="hadith-book-name">🔍 نتائج البحث في ${getBookName(currentBook || 'quran')}</span><span class="hadith-number">${data.length} نتيجة</span></div><div class="search-results">`;
+            let html = `<div class="hadith-card"><div class="hadith-header"><span class="hadith-book-name">🔍 نتائج البحث في ${getBookName(bookId)}</span><span class="hadith-number">${data.length} نتيجة</span></div><div class="search-results">`;
             data.forEach(item => {
                 const preview = item.text.length > 250 ? item.text.substring(0, 250) + '...' : item.text;
-                if (currentBook === 'quran' || !currentBook) {
-                    html += `<div class="search-result-item" onclick="selectQuran().then(()=>showSurah(${item.surah}).then(()=>scrollToAyah(${item.ayah})))"><div class="res-num">📖 سورة ${item.surah_name} - آية ${item.ayah}</div><div class="res-text">${safeHighlight(preview, query)}</div></div>`;
+                if (bookId === 'quran') {
+                    html += `<div class="search-result-item" onclick="selectQuran().then(()=>showSurah(${item.surah}).then(()=>scrollToAyah(${item.ayah})))"><div class="res-num">📖 سورة ${escapeHtml(item.surah_name)} - آية ${item.ayah}</div><div class="res-text">${safeHighlight(preview, query)}</div></div>`;
                 } else {
-                    html += `<div class="search-result-item" onclick="showHadith(${item.index})"><div class="res-num">📌 حديث رقم ${item.id}</div>${item.narrator ? `<div style="color:#b8860b;font-size:13px;margin:5px 0;">🎙️ ${item.narrator}</div>` : ''}<div class="res-text">${safeHighlight(preview, query)}</div></div>`;
+                    html += `<div class="search-result-item" onclick="showHadith(${item.index})"><div class="res-num">📌 حديث رقم ${item.id}</div>${item.narrator ? `<div style="color:#b8860b;font-size:13px;margin:5px 0;">🎙️ ${escapeHtml(item.narrator)}</div>` : ''}<div class="res-text">${safeHighlight(preview, query)}</div></div>`;
                 }
             });
             html += '</div></div>';
@@ -594,6 +600,8 @@ HTML_TEMPLATE = r"""
     function hideAbjad() { document.getElementById('abjadModal').classList.remove('show'); }
     function showAbout() { document.getElementById('aboutModal').classList.add('show'); }
     function hideAbout() { document.getElementById('aboutModal').classList.remove('show'); }
+    function showBookmarks() { document.getElementById('bookmarksModal').classList.add('show'); }
+    function hideBookmarks() { document.getElementById('bookmarksModal').classList.remove('show'); }
     function calcAbjad() { alert('الميزة قيد التطوير'); }
     function detectLocation() { alert('سيتم تحديد الموقع'); }
     function changeFontSize() { alert('تم'); }
