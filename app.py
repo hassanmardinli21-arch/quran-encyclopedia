@@ -150,16 +150,37 @@ def get_surah():
     surah_name = next((s['name'] for s in surahs_list if s['id'] == surah_num), '')
     return jsonify({'surah': surah_num, 'name': surah_name, 'ayahs': ayahs})
 
+@app.route('/api/search')
+def search():
+    book_id = request.args.get('book', 'bukhari')
+    query = request.args.get('query', '').strip()
+    search_type = request.args.get('type', 'word')
+    if book_id not in BOOKS: return jsonify([])
+    hadiths = load_hadith_book(book_id)
+    if search_type == 'number':
+        try: target_id = int(query)
+        except ValueError: return jsonify([])
+        results = []
+        for i, h in enumerate(hadiths):
+            if h.get('idInBook') == target_id:
+                results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
+        return jsonify(results)
+    if not query: return jsonify([])
+    results = []
+    for i, h in enumerate(hadiths):
+        arabic_text = h.get('arabic', '')
+        if match_text(arabic_text, query, search_type):
+            results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
+    return jsonify(results)
+
 @app.route('/api/search_advanced')
 def search_advanced():
     query = request.args.get('query', '').strip()
     books_param = request.args.get('books', '')
     include_quran = request.args.get('quran', '0') == '1'
     search_type = request.args.get('type', 'word')
-    
     if not query: return jsonify({'books': {}, 'quran': []})
     result = {'books': {}, 'quran': []}
-
     if include_quran and search_type != 'number':
         quran_results = []
         for (s, a), text in quran_ayahs_map.items():
@@ -167,17 +188,23 @@ def search_advanced():
                 surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
                 quran_results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
         result['quran'] = quran_results
-
     selected = []
     if books_param == 'all': selected = list(BOOKS.keys())
     elif books_param: selected = [b.strip() for b in books_param.split(',') if b.strip() in BOOKS]
-
     for book_id in selected:
         hadiths = load_hadith_book(book_id)
         book_results = []
-        for i, h in enumerate(hadiths):
-            if match_text(h.get('arabic', ''), query, search_type):
-                book_results.append({'index': i, 'id': h.get('idInBook', i+1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
+        if search_type == 'number':
+            try: target_id = int(query)
+            except ValueError: continue
+            for i, h in enumerate(hadiths):
+                if h.get('idInBook') == target_id:
+                    book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
+        else:
+            for i, h in enumerate(hadiths):
+                arabic_text = h.get('arabic', '')
+                if match_text(arabic_text, query, search_type):
+                    book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
         if book_results:
             result['books'][book_id] = {'name': BOOKS[book_id], 'results': book_results}
     return jsonify(result)
@@ -904,7 +931,7 @@ HTML_TEMPLATE = r"""
     function copyAyah(n) { const el = document.getElementById('ayah-' + n); if (!el) return; const text = el.querySelector('span').innerText; navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ الآية')); }
     function copySurah() { const c = document.querySelector('.surah-container'); if (!c) return; let text = c.querySelector('h2').innerText + '\n\n'; c.querySelectorAll('.ayah-line').forEach(l => { text += l.querySelector('span').innerText + ' (' + l.dataset.ayah + ')\n'; }); navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة')); }
 
-    // ==================== البحث العادي (معدل) ====================
+    // ==================== البحث العادي (معدل ليعمل في القرآن والكتب) ====================
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim();
         const type = document.getElementById('searchType').value;
@@ -916,7 +943,7 @@ HTML_TEMPLATE = r"""
         const content = document.getElementById('content');
         content.innerHTML = '<div class="loading">جاري البحث...</div>';
         
-        // إذا كان المستخدم في وضع القرآن، نبحث في القرآن باستخدام واجهة البحث المتقدم
+        // إذا كان المستخدم في وضع القرآن، نبحث في القرآن
         if (currentBook === 'quran') {
             try {
                 const res = await fetch(`/api/search_advanced?query=${encodeURIComponent(query)}&type=${type}&quran=1`);
