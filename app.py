@@ -571,7 +571,10 @@ HTML_TEMPLATE = r"""
     // تحميل العلامات عند بدء التشغيل
     window.addEventListener('load', () => { loadBookmarks(); });
 
-
+    function showSync() {
+        document.getElementById('syncModal').classList.add('show');
+        document.getElementById('syncCode').value = userId;
+    }
     function hideSync() { document.getElementById('syncModal').classList.remove('show'); }
     function copySyncCode() {
         const inp = document.getElementById('syncCode');
