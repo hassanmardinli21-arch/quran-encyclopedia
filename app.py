@@ -155,26 +155,59 @@ def search():
     book_id = request.args.get('book', 'bukhari')
     query = request.args.get('query', '').strip()
     search_type = request.args.get('type', 'word')
-    if not query: return jsonify([])
-    
-    # البحث في القرآن
-    if book_id == 'quran':
-        results = []
-        for (s, a), text in quran_ayahs_map.items():
-            if match_text(text, query, search_type):
-                surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
-                results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
-        return jsonify(results)
-    
-    # البحث في الكتب
     if book_id not in BOOKS: return jsonify([])
     hadiths = load_hadith_book(book_id)
+    if search_type == 'number':
+        try: target_id = int(query)
+        except ValueError: return jsonify([])
+        results = []
+        for i, h in enumerate(hadiths):
+            if h.get('idInBook') == target_id:
+                results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
+        return jsonify(results)
+    if not query: return jsonify([])
     results = []
     for i, h in enumerate(hadiths):
         arabic_text = h.get('arabic', '')
         if match_text(arabic_text, query, search_type):
             results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
     return jsonify(results)
+
+@app.route('/api/search_advanced')
+def search_advanced():
+    query = request.args.get('query', '').strip()
+    books_param = request.args.get('books', '')
+    include_quran = request.args.get('quran', '0') == '1'
+    search_type = request.args.get('type', 'word')
+    if not query: return jsonify({'books': {}, 'quran': []})
+    result = {'books': {}, 'quran': []}
+    if include_quran and search_type != 'number':
+        quran_results = []
+        for (s, a), text in quran_ayahs_map.items():
+            if match_text(text, query, search_type):
+                surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
+                quran_results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
+        result['quran'] = quran_results
+    selected = []
+    if books_param == 'all': selected = list(BOOKS.keys())
+    elif books_param: selected = [b.strip() for b in books_param.split(',') if b.strip() in BOOKS]
+    for book_id in selected:
+        hadiths = load_hadith_book(book_id)
+        book_results = []
+        if search_type == 'number':
+            try: target_id = int(query)
+            except ValueError: continue
+            for i, h in enumerate(hadiths):
+                if h.get('idInBook') == target_id:
+                    book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
+        else:
+            for i, h in enumerate(hadiths):
+                arabic_text = h.get('arabic', '')
+                if match_text(arabic_text, query, search_type):
+                    book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
+        if book_results:
+            result['books'][book_id] = {'name': BOOKS[book_id], 'results': book_results}
+    return jsonify(result)
 
 # ==================== 6. HTML ====================
 HTML_TEMPLATE = r"""
@@ -215,6 +248,8 @@ HTML_TEMPLATE = r"""
         .search-area select { padding: 10px 12px; border-radius: 8px; border: none; font-size: 14px; font-family: inherit; background: white; cursor: pointer; min-width: 170px; }
         .search-area button { background: var(--gold); border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; font-family: inherit; white-space: nowrap; }
         .search-area button:hover { background: #b8935a; }
+        .search-area button.adv-btn { background: #27ae60; }
+        .search-area button.adv-btn:hover { background: #1e8449; }
         
         .text-controls { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px; background: #f5f5f0; border-bottom: 2px solid #ddd; flex-wrap: wrap; }
         .text-controls button { background: var(--main-green); color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; font-family: inherit; }
@@ -294,8 +329,24 @@ HTML_TEMPLATE = r"""
         .modal-content h2 { text-align: center; color: var(--main-green); font-size: 24px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--gold); }
         .adv-search-input { width: 100%; padding: 12px 15px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; }
         .adv-search-input:focus { outline: none; border-color: var(--main-green); }
+        .books-selection { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 15px; max-height: 400px; overflow-y: auto; }
+        .quick-select { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .quick-select button { padding: 8px 14px; background: var(--main-green); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: bold; }
+        .quick-select button:hover { background: #40916c; }
+        .book-checkbox { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; background: white; border-radius: 6px; margin-bottom: 4px; }
+        .book-checkbox:hover { background: var(--light-green); }
+        .book-checkbox input { margin-left: 12px; width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; }
+        .book-checkbox label { flex: 1; cursor: pointer; font-size: 16px; font-weight: 500; }
+        .book-checkbox.quran-special { background: #fff9e6; font-weight: bold; border: 2px solid var(--gold); border-radius: 8px; margin-bottom: 8px; }
         .adv-search-btn { width: 100%; padding: 14px; background: var(--gold); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 17px; font-weight: bold; font-family: inherit; }
         .adv-search-btn:hover { background: #b8935a; }
+        
+        .adv-type-select { width: 100%; padding: 12px 15px; font-size: 15px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; background: white; cursor: pointer; }
+        .adv-type-select:focus { outline: none; border-color: var(--main-green); }
+        
+        .adv-results-section { margin-bottom: 25px; }
+        .adv-book-title { background: var(--main-green); color: white; padding: 10px 15px; border-radius: 8px; font-size: 17px; font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .adv-book-title .count { background: var(--gold); color: white; padding: 2px 10px; border-radius: 15px; font-size: 13px; }
         
         .abjad-total { text-align: center; background: linear-gradient(135deg, #1a4d2e, #2d6a4f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
         .abjad-total .lbl { font-size: 15px; opacity: 0.9; }
@@ -880,7 +931,7 @@ HTML_TEMPLATE = r"""
     function copyAyah(n) { const el = document.getElementById('ayah-' + n); if (!el) return; const text = el.querySelector('span').innerText; navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ الآية')); }
     function copySurah() { const c = document.querySelector('.surah-container'); if (!c) return; let text = c.querySelector('h2').innerText + '\n\n'; c.querySelectorAll('.ayah-line').forEach(l => { text += l.querySelector('span').innerText + ' (' + l.dataset.ayah + ')\n'; }); navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة')); }
 
-    // ==================== البحث العادي (معدل) ====================
+    // ==================== البحث العادي ====================
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim();
         const type = document.getElementById('searchType').value;
@@ -892,11 +943,11 @@ HTML_TEMPLATE = r"""
         const content = document.getElementById('content');
         content.innerHTML = '<div class="loading">جاري البحث...</div>';
         
-        if (currentBook === 'quran' || !currentBook) {
+        if (currentBook === 'quran') {
             try {
-                const res = await fetch(`/api/search?book=quran&query=${encodeURIComponent(query)}&type=${type}`);
+                const res = await fetch(`/api/search_advanced?query=${encodeURIComponent(query)}&type=${type}&quran=1`);
                 const data = await res.json();
-                const quranResults = data || [];
+                const quranResults = data.quran || [];
                 
                 if (quranResults.length === 0) {
                     content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${escapeHtml(query)}" في القرآن الكريم</div>`;
@@ -927,38 +978,38 @@ HTML_TEMPLATE = r"""
             }
         }
         
-        if (currentBook && currentBook !== 'quran') {
-            try {
-                const res = await fetch(`/api/search?book=${currentBook}&query=${encodeURIComponent(query)}&type=${type}`);
-                if (!res.ok) throw new Error('فشل الاتصال');
-                const data = await res.json();
-                
-                if (!Array.isArray(data) || data.length === 0) {
-                    content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${escapeHtml(query)}" في ${getBookName(currentBook)}</div>`;
-                    return;
-                }
-                
-                let html = `<div class="hadith-card">
-                    <div class="hadith-header">
-                        <span class="hadith-book-name">🔍 نتائج البحث في ${getBookName(currentBook)}</span>
-                        <span class="hadith-number">${data.length} نتيجة</span>
-                    </div>
-                    <div class="search-results">`;
-                data.forEach(item => {
-                    const preview = item.text.length > 250 ? item.text.substring(0, 250) + '...' : item.text;
-                    html += `<div class="search-result-item" onclick="showHadith(${item.index})">
-                        <div class="res-num">📌 حديث رقم ${item.id}
-                            <span class="res-abjad-badge">جُمّل: ${item.abjad || 0}</span>
-                        </div>
-                        ${item.narrator ? `<div style="color:#b8860b;font-size:13px;margin:5px 0;">🎙️ ${escapeHtml(item.narrator)}</div>` : ''}
-                        <div class="res-text">${safeHighlight(preview, query)}</div>
-                    </div>`;
-                });
-                html += '</div></div>';
-                content.innerHTML = html;
-            } catch(e) {
-                content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ في البحث</div>';
+        if (!currentBook) { currentBook = 'bukhari'; setActiveBook('bukhari'); }
+        
+        try {
+            const res = await fetch(`/api/search?book=${currentBook}&query=${encodeURIComponent(query)}&type=${type}`);
+            if (!res.ok) throw new Error('فشل الاتصال');
+            const data = await res.json();
+            
+            if (!Array.isArray(data) || data.length === 0) {
+                content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${escapeHtml(query)}" في ${getBookName(currentBook)}</div>`;
+                return;
             }
+            
+            let html = `<div class="hadith-card">
+                <div class="hadith-header">
+                    <span class="hadith-book-name">🔍 نتائج البحث في ${getBookName(currentBook)}</span>
+                    <span class="hadith-number">${data.length} نتيجة</span>
+                </div>
+                <div class="search-results">`;
+            data.forEach(item => {
+                const preview = item.text.length > 250 ? item.text.substring(0, 250) + '...' : item.text;
+                html += `<div class="search-result-item" onclick="showHadith(${item.index})">
+                    <div class="res-num">📌 حديث رقم ${item.id}
+                        <span class="res-abjad-badge">جُمّل: ${item.abjad || 0}</span>
+                    </div>
+                    ${item.narrator ? `<div style="color:#b8860b;font-size:13px;margin:5px 0;">🎙️ ${escapeHtml(item.narrator)}</div>` : ''}
+                    <div class="res-text">${safeHighlight(preview, query)}</div>
+                </div>`;
+            });
+            html += '</div></div>';
+            content.innerHTML = html;
+        } catch(e) {
+            content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ في البحث</div>';
         }
     }
 
