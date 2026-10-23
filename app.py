@@ -155,17 +155,20 @@ def search():
     book_id = request.args.get('book', 'bukhari')
     query = request.args.get('query', '').strip()
     search_type = request.args.get('type', 'word')
+    if not query: return jsonify([])
+    
+    # البحث في القرآن
+    if book_id == 'quran':
+        results = []
+        for (s, a), text in quran_ayahs_map.items():
+            if match_text(text, query, search_type):
+                surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
+                results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
+        return jsonify(results)
+    
+    # البحث في الكتب
     if book_id not in BOOKS: return jsonify([])
     hadiths = load_hadith_book(book_id)
-    if search_type == 'number':
-        try: target_id = int(query)
-        except ValueError: return jsonify([])
-        results = []
-        for i, h in enumerate(hadiths):
-            if h.get('idInBook') == target_id:
-                results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': h.get('arabic', ''), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic', ''))})
-        return jsonify(results)
-    if not query: return jsonify([])
     results = []
     for i, h in enumerate(hadiths):
         arabic_text = h.get('arabic', '')
@@ -329,24 +332,8 @@ HTML_TEMPLATE = r"""
         .modal-content h2 { text-align: center; color: var(--main-green); font-size: 24px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--gold); }
         .adv-search-input { width: 100%; padding: 12px 15px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; }
         .adv-search-input:focus { outline: none; border-color: var(--main-green); }
-        .books-selection { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 15px; max-height: 400px; overflow-y: auto; }
-        .quick-select { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-        .quick-select button { padding: 8px 14px; background: var(--main-green); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: bold; }
-        .quick-select button:hover { background: #40916c; }
-        .book-checkbox { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; background: white; border-radius: 6px; margin-bottom: 4px; }
-        .book-checkbox:hover { background: var(--light-green); }
-        .book-checkbox input { margin-left: 12px; width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; }
-        .book-checkbox label { flex: 1; cursor: pointer; font-size: 16px; font-weight: 500; }
-        .book-checkbox.quran-special { background: #fff9e6; font-weight: bold; border: 2px solid var(--gold); border-radius: 8px; margin-bottom: 8px; }
         .adv-search-btn { width: 100%; padding: 14px; background: var(--gold); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 17px; font-weight: bold; font-family: inherit; }
         .adv-search-btn:hover { background: #b8935a; }
-        
-        .adv-type-select { width: 100%; padding: 12px 15px; font-size: 15px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; background: white; cursor: pointer; }
-        .adv-type-select:focus { outline: none; border-color: var(--main-green); }
-        
-        .adv-results-section { margin-bottom: 25px; }
-        .adv-book-title { background: var(--main-green); color: white; padding: 10px 15px; border-radius: 8px; font-size: 17px; font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; }
-        .adv-book-title .count { background: var(--gold); color: white; padding: 2px 10px; border-radius: 15px; font-size: 13px; }
         
         .abjad-total { text-align: center; background: linear-gradient(135deg, #1a4d2e, #2d6a4f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
         .abjad-total .lbl { font-size: 15px; opacity: 0.9; }
@@ -690,24 +677,74 @@ HTML_TEMPLATE = r"""
     const ABJAD_MAP = {'ا':1,'أ':1,'إ':1,'آ':1,'ء':1,'ؤ':1,'ئ':1,'ب':2,'ج':3,'د':4,'ه':5,'ة':5,'و':6,'ز':7,'ح':8,'ط':9,'ي':10,'ى':10,'ك':20,'ل':30,'م':40,'ن':50,'س':60,'ع':70,'ف':80,'ص':90,'ق':100,'ر':200,'ش':300,'ت':400,'ث':500,'خ':600,'ذ':700,'ض':800,'ظ':900,'غ':1000};
 
     function toHijri(date) {
-        let day = date.getDate(); let month = date.getMonth() + 1; let year = date.getFullYear();
-        let m = month; let y = year; let d = day;
-        if (m < 3) { y -= 1; m += 12; }
-        let a = Math.floor(y / 100); let b = 2 - a + Math.floor(a / 4);
+        let day = date.getDate();
+        let month = date.getMonth() + 1;
+        let year = date.getFullYear();
+
+        let m = month;
+        let y = year;
+        let d = day;
+
+        if (m < 3) {
+            y -= 1;
+            m += 12;
+        }
+
+        let a = Math.floor(y / 100);
+        let b = 2 - a + Math.floor(a / 4);
+
         if (y < 1583) b = 0;
-        if (y === 1582) { if (m > 10) b = -10; if (m === 10) { b = 0; if (d > 4) b = -10; } }
+        if (y === 1582) {
+            if (m > 10) b = -10;
+            if (m === 10) {
+                b = 0;
+                if (d > 4) b = -10;
+            }
+        }
+
         let jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + b - 1524;
+
         b = 0;
-        if (jd > 2299160) { a = Math.floor((jd - 1867216.25) / 36524.25); b = 1 + a - Math.floor(a / 4); }
-        let bb = jd + b + 1524; let cc = Math.floor((bb - 122.1) / 365.25); let dd = Math.floor(365.25 * cc); let ee = Math.floor((bb - dd) / 30.6001);
+        if (jd > 2299160) {
+            a = Math.floor((jd - 1867216.25) / 36524.25);
+            b = 1 + a - Math.floor(a / 4);
+        }
+
+        let bb = jd + b + 1524;
+        let cc = Math.floor((bb - 122.1) / 365.25);
+        let dd = Math.floor(365.25 * cc);
+        let ee = Math.floor((bb - dd) / 30.6001);
+
         day = bb - dd - Math.floor(30.6001 * ee);
-        if (ee < 14) { month = ee - 1; } else { month = ee - 13; }
-        if (month > 2) { year = cc - 4716; } else { year = cc - 4715; }
-        let jdH = Math.floor((11 * year + 3) / 30) + 354 * year + Math.floor(30 * (month - 1)) - Math.floor((month - 1) / 2) + day + 1948440 - 385;
-        let l = jdH - 1948440 + 10632; let n = Math.floor((l - 1) / 10631); l = l - 10631 * n + 354;
-        let j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719) + Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
-        l = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
-        let hMonth = Math.floor((24 * l) / 709); let hDay = l - Math.floor((709 * hMonth) / 24); let hYear = 30 * n + j - 30;
+
+        if (ee < 14) {
+            month = ee - 1;
+        } else {
+            month = ee - 13;
+        }
+
+        if (month > 2) {
+            year = cc - 4716;
+        } else {
+            year = cc - 4715;
+        }
+
+        let jdH = Math.floor((11 * year + 3) / 30) + 354 * year + Math.floor(30 * (month - 1)) -
+                  Math.floor((month - 1) / 2) + day + 1948440 - 385;
+
+        let l = jdH - 1948440 + 10632;
+        let n = Math.floor((l - 1) / 10631);
+        l = l - 10631 * n + 354;
+
+        let j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719) +
+                Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
+        l = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) -
+            Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+
+        let hMonth = Math.floor((24 * l) / 709);
+        let hDay = l - Math.floor((709 * hMonth) / 24);
+        let hYear = 30 * n + j - 30;
+
         return { day: hDay, month: hMonth, year: hYear };
     }
 
@@ -931,7 +968,7 @@ HTML_TEMPLATE = r"""
     function copyAyah(n) { const el = document.getElementById('ayah-' + n); if (!el) return; const text = el.querySelector('span').innerText; navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ الآية')); }
     function copySurah() { const c = document.querySelector('.surah-container'); if (!c) return; let text = c.querySelector('h2').innerText + '\n\n'; c.querySelectorAll('.ayah-line').forEach(l => { text += l.querySelector('span').innerText + ' (' + l.dataset.ayah + ')\n'; }); navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة')); }
 
-    // ==================== البحث العادي ====================
+    // ==================== البحث العادي (معدل) ====================
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim();
         const type = document.getElementById('searchType').value;
