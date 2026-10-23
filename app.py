@@ -81,7 +81,22 @@ def match_text(text, query, search_type):
     return norm_query in norm_text
 
 # ==================== 3. الكتب ====================
-BOOKS = {'bukhari':'صحيح البخاري','muslim':'صحيح مسلم','abudawud':'سنن أبي داود','tirmidhi':'جامع الترمذي','nasai':'سنن النسائي','ibnmajah':'سنن ابن ماجه','malik':'موطأ مالك','ahmed':'مسند أحمد','darimi':'سنن الدارمي','riyad_assalihin':'رياض الصالحين','aladab_almufrad':'الأدب المفرد','bulugh_almaram':'بلوغ المرام','mishkat_almasabih':'مشكاة المصابيح','shamail_muhammadiyah':'الشمائل المحمدية'}
+BOOKS = {
+    'bukhari':'صحيح البخاري',
+    'muslim':'صحيح مسلم',
+    'abudawud':'سنن أبي داود',
+    'tirmidhi':'جامع الترمذي',
+    'nasai':'سنن النسائي',
+    'ibnmajah':'سنن ابن ماجه',
+    'malik':'موطأ مالك',
+    'ahmed':'مسند أحمد',
+    'darimi':'سنن الدارمي',
+    'riyad_assalihin':'رياض الصالحين',
+    'aladab_almufrad':'الأدب المفرد',
+    'bulugh_almaram':'بلوغ المرام',
+    'mishkat_almasabih':'مشكاة المصابيح',
+    'shamail_muhammadiyah':'الشمائل المحمدية'
+}
 loaded_books_cache = {}
 
 def load_hadith_book(book_id):
@@ -171,10 +186,9 @@ def get_surah():
 def search():
     book_id = request.args.get('book', 'quran')
     query = request.args.get('query', '').strip()
-    search_type = request.args.get('type', 'word')
+    search_type = request.args.get('type', 'fuzzy')
     if not query: return jsonify([])
     
-    # البحث في القرآن
     if book_id == 'quran':
         results = []
         for (s, a), text in quran_ayahs_map.items():
@@ -183,7 +197,6 @@ def search():
                 results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
         return jsonify(results)
     
-    # البحث في كتب الحديث
     if book_id not in BOOKS: return jsonify([])
     hadiths = load_hadith_book(book_id)
     results = []
@@ -192,6 +205,42 @@ def search():
         if match_text(arabic_text, query, search_type):
             results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
     return jsonify(results)
+
+@app.route('/api/search_advanced')
+def search_advanced():
+    query = request.args.get('query', '').strip()
+    books_param = request.args.get('books', '')
+    include_quran = request.args.get('quran', '0') == '1'
+    search_type = request.args.get('type', 'fuzzy')
+    if not query: return jsonify({'books': {}, 'quran': []})
+    
+    result = {'books': {}, 'quran': []}
+    
+    if include_quran:
+        quran_results = []
+        for (s, a), text in quran_ayahs_map.items():
+            if match_text(text, query, search_type):
+                surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
+                quran_results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
+        result['quran'] = quran_results
+        
+    selected = []
+    if books_param == 'all': 
+        selected = list(BOOKS.keys())
+    elif books_param: 
+        selected = [b.strip() for b in books_param.split(',') if b.strip() in BOOKS]
+        
+    for book_id in selected:
+        hadiths = load_hadith_book(book_id)
+        book_results = []
+        for i, h in enumerate(hadiths):
+            arabic_text = h.get('arabic', '')
+            if match_text(arabic_text, query, search_type):
+                book_results.append({'index': i, 'id': h.get('idInBook', i + 1), 'text': arabic_text, 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(arabic_text)})
+        if book_results:
+            result['books'][book_id] = {'name': BOOKS[book_id], 'results': book_results}
+            
+    return jsonify(result)
 
 # ==================== 6. HTML Template ====================
 HTML_TEMPLATE = r"""
@@ -214,6 +263,8 @@ HTML_TEMPLATE = r"""
         .top-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
         .top-btn { background: #2d6a4f; color: white; border: 1px solid rgba(255,255,255,0.2); padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.2s; font-weight: bold; }
         .top-btn:hover { background: #40916c; }
+        .top-btn.adv { background: #27ae60; }
+        .top-btn.adv:hover { background: #219653; }
         
         .info-bar { background: #2d6a4f; color: white; padding: 12px 20px; border-bottom: 2px solid var(--gold); text-align: center; }
         .info-time { font-size: 28px; font-weight: bold; color: var(--gold); margin-bottom: 5px; font-family: 'Segoe UI', sans-serif; }
@@ -276,7 +327,6 @@ HTML_TEMPLATE = r"""
         .nav-btn:hover:not(:disabled) { background: #40916c; transform: translateY(-2px); }
         .nav-btn:disabled { background: #ccc; cursor: not-allowed; }
         
-        /* زر فهرس النتائج الثابت */
         .back-to-index-btn { display: none; width: 100%; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 15px; text-align: center; font-family: inherit; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .back-to-index-btn:hover { background: #219653; }
         
@@ -312,13 +362,14 @@ HTML_TEMPLATE = r"""
     <div class="top-actions">
         <button class="top-btn" onclick="toggleDark()">🌙 ليلي</button>
         <button class="top-btn" onclick="detectLocation()">📍 تحديد الموقع</button>
+        <button class="top-btn adv" onclick="showAdvancedSearch()">🔍 بحث متقدم</button>
         <button class="top-btn" onclick="showBookmarks()">🔖 علاماتي</button>
         <button class="top-btn" onclick="showAbjad()">🔢 حساب الجُمّل</button>
         <button class="top-btn" onclick="showHistory()">📜 سجل البحث</button>
         <button class="top-btn" onclick="showAbout()">ℹ️ حول التطبيق</button>
     </div>
     <div class="search-area">
-        <input type="text" id="searchInput" placeholder="ابحث في القرآن أو الحديث..." onkeydown="if(event.key==='Enter') doSearch()">
+        <input type="text" id="searchInput" placeholder="ابحث في الكتاب الحالي..." onkeydown="if(event.key==='Enter') doSearch()">
         <select id="searchType">
             <option value="fuzzy">🌊 بحث مرن (بدون تشكيل)</option>
             <option value="word">🔤 كلمة كاملة</option>
@@ -368,17 +419,48 @@ HTML_TEMPLATE = r"""
     </div>
 </div>
 
-<!-- النافذة المودال لسجل البحث -->
+<!-- نافذة البحث المتقدم الشامل -->
+<div class="modal-overlay" id="advSearchModal" onclick="if(event.target===this) hideAdvancedSearch()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="hideAdvancedSearch()">✕</button>
+        <h2>🔍 البحث المتقدم في الموسوعة</h2>
+        <input type="text" id="advQuery" placeholder="اكتب كلمة أو عبارة للبحث الشامل..." style="width:100%; padding:12px; border-radius:8px; border:1px solid #ccc; font-size:16px; margin-bottom:15px; font-family:inherit;">
+        
+        <div style="margin-bottom: 15px; background:#f9f9f5; padding:12px; border-radius:8px;">
+            <label style="font-weight: bold; color: var(--main-green); display:block; margin-bottom:8px;">اختر نطاق البحث:</label>
+            <div style="margin-bottom:8px;"><label><input type="checkbox" id="advIncludeQuran" checked> 📖 القرآن الكريم</label></div>
+            <div style="margin-bottom:8px;"><label><input type="checkbox" id="advIncludeAllBooks" checked onchange="toggleAllBooks(this)"> 📚 تحديد/إلغاء جميع كتب الحديث</label></div>
+            <div id="booksCheckboxesContainer" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:6px; max-height:160px; overflow-y:auto; padding-top:6px; border-top:1px dashed #ddd;">
+                {% for key, value in books.items() %}
+                <label style="font-size:13px;"><input type="checkbox" class="book-chk" value="{{ key }}" checked> {{ value }}</label>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <button style="width:100%; padding:14px; background:var(--gold); color:white; border:none; border-radius:8px; cursor:pointer; font-size:17px; font-weight:bold; font-family:inherit;" onclick="executeAdvancedSearch()">بحث شامل</button>
+    </div>
+</div>
+
+<!-- نافذة العلامات المرجعية -->
+<div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="hideBookmarks()">✕</button>
+        <h2>🔖 العلامات المحفوظة</h2>
+        <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<!-- نافذة سجل البحث -->
 <div class="modal-overlay" id="historyModal" onclick="if(event.target===this) hideHistory()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideHistory()">✕</button>
         <h2>📜 سجل البحث</h2>
         <div id="historyList" style="max-height: 400px; overflow-y: auto;"></div>
-        <button class="adv-search-btn" style="margin-top:10px; background:#c0392b; color:white; padding:10px; border:none; border-radius:6px; cursor:pointer; width:100%;" onclick="clearHistory()">🗑️ مسح السجل</button>
+        <button style="margin-top:10px; background:#c0392b; color:white; padding:10px; border:none; border-radius:6px; cursor:pointer; width:100%;" onclick="clearHistory()">🗑️ مسح السجل</button>
     </div>
 </div>
 
-<!-- النافذة المودال لحساب الجُمّل -->
+<!-- نافذة حساب الجُمّل -->
 <div class="modal-overlay" id="abjadModal" onclick="if(event.target===this) hideAbjad()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideAbjad()">✕</button>
@@ -389,15 +471,6 @@ HTML_TEMPLATE = r"""
     </div>
 </div>
 
-<!-- نافذة العلامات -->
-<div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
-    <div class="modal-content">
-        <button class="modal-close" onclick="hideBookmarks()">✕</button>
-        <h2>🔖 العلامات المحفوظة</h2>
-        <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;"></div>
-    </div>
-</div>
-
 <!-- نافذة حول التطبيق -->
 <div class="modal-overlay" id="aboutModal" onclick="if(event.target===this) hideAbout()">
     <div class="modal-content">
@@ -405,7 +478,7 @@ HTML_TEMPLATE = r"""
         <h2>🕌 حول التطبيق 📚</h2>
         <div style="background: linear-gradient(135deg, #1a4d2e 0%, #2d6a4f 100%); color:white; padding:20px; border-radius:12px; text-align:center; margin-bottom:20px;">
             <h3 style="color:var(--gold); margin-bottom:10px;">الموسوعة الإسلامية الشاملة</h3>
-            <p>تطبيق شامل للقرآن الكريم وتفسير السعدي والحديث النبوي ومواقيت الصلاة وإندكس نتائج البحث.</p>
+            <p>تطبيق شامل ومتقدم للقرآن الكريم، تفسير السعدي، أمهات كتب الحديث النبوي الشريف، أوقات الصلاة، حساب الجُمّل، والفهرس الذكي لنتائج البحث.</p>
         </div>
     </div>
 </div>
@@ -416,7 +489,9 @@ let currentIndex = 0;
 let totalHadiths = 0;
 let fontSize = parseInt(localStorage.getItem('fontSize')) || 24;
 let currentSurahNum = 1;
-let lastSearchResultsHTML = ''; // حفظ فهرس نتائج البحث للعودة إليه
+let lastSearchResultsHTML = '';
+let userSyncId = localStorage.getItem('userSyncId') || 'user_' + Math.random().toString(36).substr(2, 9);
+localStorage.setItem('userSyncId', userSyncId);
 
 document.addEventListener('DOMContentLoaded', () => {
     applyFontSize(fontSize);
@@ -546,6 +621,7 @@ function loadSurah(surahNum, highlightAyah = null) {
                         <span class="ayah-abjad">جُمّل: ${a.abjad}</span>
                         <div class="ayah-actions">
                             <button class="ayah-action-btn" onclick="toggleTafsir(${a.ayah})">📖 التفسير</button>
+                            <button class="ayah-action-btn" onclick="addBookmark('quran', 'سورة ${data.name} - آية ${a.ayah}', 'quran_${surahNum}_${a.ayah}')">🔖 حفظ</button>
                             <button class="ayah-action-btn" onclick="copyText(\`${a.text}\`)">📋 نسخ</button>
                         </div>
                         <div class="tafsir-panel" id="tafsir-${a.ayah}">
@@ -623,8 +699,9 @@ function loadHadith(bookId, index) {
                     <div class="abjad-badge">حساب الجُمّل للحديث: ${data.abjad}</div>
                     ${data.narrator ? `<div class="narrator">👤 الراوي: ${data.narrator}</div>` : ''}
                     <div class="hadith-text">${data.text}</div>
-                    <div class="copy-buttons">
-                        <button class="copy-btn" onclick="copyText(\`${data.text}\`)">📋 نسخ الحديث</button>
+                    <div class="copy-buttons" style="display:flex; gap:10px; justify-content:center; margin-top:15px;">
+                        <button class="book-btn" onclick="copyText(\`${data.text}\`)">📋 نسخ الحديث</button>
+                        <button class="book-btn" onclick="addBookmark('${bookId}', '${bookName} - حديث ${data.id}', 'hadith_${bookId}_${data.id}')">🔖 حفظ الحديث</button>
                     </div>
                 </div>
                 
@@ -638,7 +715,6 @@ function loadHadith(bookId, index) {
         });
 }
 
-// ==================== البحث والفهرس ====================
 function doSearch() {
     const query = document.getElementById('searchInput').value.trim();
     const type = document.getElementById('searchType').value;
@@ -685,7 +761,82 @@ function doSearch() {
             });
             html += '</div>';
             
-            lastSearchResultsHTML = html; // حفظ الفهرس
+            lastSearchResultsHTML = html;
+            content.innerHTML = html;
+            document.getElementById('backToIndexBtn').style.display = 'none';
+            applyFontSize(fontSize);
+        });
+}
+
+function showAdvancedSearch() { document.getElementById('advSearchModal').classList.add('show'); }
+function hideAdvancedSearch() { document.getElementById('advSearchModal').classList.remove('show'); }
+
+function toggleAllBooks(master) {
+    document.querySelectorAll('.book-chk').forEach(chk => chk.checked = master.checked);
+}
+
+function executeAdvancedSearch() {
+    const query = document.getElementById('advQuery').value.trim();
+    const includeQuran = document.getElementById('advIncludeQuran').checked ? '1' : '0';
+    
+    let selectedBooks = [];
+    document.querySelectorAll('.book-chk:checked').forEach(chk => selectedBooks.push(chk.value));
+    
+    if (!query) {
+        alert('الرجاء إدخال كلمة للبحث.');
+        return;
+    }
+    
+    hideAdvancedSearch();
+    saveToHistory(query);
+    const content = document.getElementById('content');
+    content.innerHTML = '<div class="loading">جاري إجراء البحث المتقدم الشامل... 🔍</div>';
+    
+    fetch(`/api/search_advanced?query=${encodeURIComponent(query)}&quran=${includeQuran}&books=${selectedBooks.join(',')}`)
+        .then(res => res.json())
+        .then(data => {
+            let totalCount = data.quran.length;
+            Object.values(data.books).forEach(b => totalCount += b.results.length);
+            
+            if (totalCount === 0) {
+                content.innerHTML = '<div class="loading">لم يتم العثور على نتائج مطابقة للبحث المتقدم.</div>';
+                document.getElementById('backToIndexBtn').style.display = 'none';
+                return;
+            }
+            
+            let html = `
+                <div class="search-results">
+                    <h3 style="color:var(--main-green); margin-bottom:15px; border-bottom:2px solid var(--gold); padding-bottom:8px;">
+                        📋 فهرس نتائج البحث المتقدم الشامل عن "${query}" - [إجمالي النتائج: ${totalCount}]
+                    </h3>
+            `;
+            
+            if (data.quran && data.quran.length > 0) {
+                html += `<h4 style="color:var(--gold); margin:10px 0;">📖 القرآن الكريم (${data.quran.length})</h4>`;
+                data.quran.forEach((res) => {
+                    html += `
+                        <div class="search-result-item" onclick="openAyahResult(${res.surah}, ${res.ayah})">
+                            <div class="res-num">سورة ${res.surah_name} [الآية: ${res.ayah}] <span class="res-abjad-badge">جُمّل: ${res.abjad}</span></div>
+                            <div class="res-text">${highlightQuery(res.text, query)}</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            for (const [bId, bObj] of Object.entries(data.books)) {
+                html += `<h4 style="color:var(--gold); margin:15px 0 10px 0;">📚 ${bObj.name} (${bObj.results.length})</h4>`;
+                bObj.results.forEach((res) => {
+                    html += `
+                        <div class="search-result-item" onclick="openHadithResult('${bId}', ${res.index})">
+                            <div class="res-num">حديث رقم: ${res.id} <span class="res-abjad-badge">جُمّل: ${res.abjad}</span></div>
+                            <div class="res-text">${highlightQuery(res.text, query)}</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            lastSearchResultsHTML = html;
             content.innerHTML = html;
             document.getElementById('backToIndexBtn').style.display = 'none';
             applyFontSize(fontSize);
@@ -716,6 +867,76 @@ function highlightQuery(text, query) {
     const cleanQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const reg = new RegExp(`(${cleanQuery})`, 'gi');
     return text.replace(reg, '<mark>$1</mark>');
+}
+
+function addBookmark(type, title, key) {
+    let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
+    if (!bookmarks.some(b => b.key === key)) {
+        bookmarks.push({ type, title, key, time: new Date().toLocaleDateString('ar-SA') });
+        localStorage.setItem('userBookmarks', JSON.stringify(bookmarks));
+        syncBookmarksServer(bookmarks);
+        alert('تم حفظ العلامة المرجعية بنجاح! 🔖');
+    } else {
+        alert('العلامة محفوظة مسبقاً.');
+    }
+}
+
+function showBookmarks() {
+    let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
+    const list = document.getElementById('bookmarksList');
+    if (bookmarks.length === 0) {
+        list.innerHTML = '<p style="text-align:center; padding:20px;">لا توجد علامات محفوظة حالياً.</p>';
+    } else {
+        list.innerHTML = bookmarks.map(b => `
+            <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
+                <div onclick="jumpToBookmark('${b.key}')" style="cursor:pointer; flex:1;">
+                    <strong>${b.title}</strong>
+                    <br><small style="color:#888;">${b.time}</small>
+                </div>
+                <button onclick="removeBookmark('${b.key}')" style="background:#c0392b; color:white; border:none; padding:5px 12px; border-radius:5px; cursor:pointer;">حذف</button>
+            </div>
+        `).join('');
+    }
+    document.getElementById('bookmarksModal').classList.add('show');
+}
+
+function hideBookmarks() { document.getElementById('bookmarksModal').classList.remove('show'); }
+
+function removeBookmark(key) {
+    let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
+    bookmarks = bookmarks.filter(b => b.key !== key);
+    localStorage.setItem('userBookmarks', JSON.stringify(bookmarks));
+    syncBookmarksServer(bookmarks);
+    showBookmarks();
+}
+
+function jumpToBookmark(key) {
+    hideBookmarks();
+    if (key.startsWith('quran_')) {
+        let parts = key.split('_');
+        let surahNum = parseInt(parts[1]);
+        let ayahNum = parseInt(parts[2]);
+        selectQuran();
+        setTimeout(() => loadSurah(surahNum, ayahNum), 300);
+    } else if (key.startsWith('hadith_')) {
+        let parts = key.split('_');
+        let bookId = parts[1];
+        let hadithId = parseInt(parts[2]);
+        selectBook(bookId);
+        fetch(`/api/hadith_by_id?book=${bookId}&id=${hadithId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.error) loadHadith(bookId, data.index);
+            });
+    }
+}
+
+function syncBookmarksServer(bookmarks) {
+    fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userSyncId, bookmarks })
+    }).catch(e => console.error('Sync error:', e));
 }
 
 function saveToHistory(query) {
@@ -754,12 +975,11 @@ function calcAbjad() {
     fetch(`/api/abjad?text=${encodeURIComponent(text)}`)
         .then(res => res.json())
         .then(data => {
-            let html = `<div style="text-align:center; background:#1a4d2e; color:white; padding:15px; border-radius:8px;"><strong>القيمة: ${data.value}</strong></div>`;
+            let html = `<div style="text-align:center; background:#1a4d2e; color:white; padding:15px; border-radius:8px;"><strong>القيمة الإجمالية: ${data.value}</strong></div>`;
             document.getElementById('abjadResult').innerHTML = html;
         });
 }
 
-function showBookmarks() { alert('زر العلامات المرجعية مفعل جاهز.'); }
 function showAbout() { document.getElementById('aboutModal').classList.add('show'); }
 function hideAbout() { document.getElementById('aboutModal').classList.remove('show'); }
 
