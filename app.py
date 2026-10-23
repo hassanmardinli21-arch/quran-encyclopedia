@@ -931,7 +931,7 @@ HTML_TEMPLATE = r"""
     function copyAyah(n) { const el = document.getElementById('ayah-' + n); if (!el) return; const text = el.querySelector('span').innerText; navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ الآية')); }
     function copySurah() { const c = document.querySelector('.surah-container'); if (!c) return; let text = c.querySelector('h2').innerText + '\n\n'; c.querySelectorAll('.ayah-line').forEach(l => { text += l.querySelector('span').innerText + ' (' + l.dataset.ayah + ')\n'; }); navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة')); }
 
-    // ==================== البحث العادي ====================
+    // ==================== البحث العادي (معدل) ====================
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim();
         const type = document.getElementById('searchType').value;
@@ -943,7 +943,7 @@ HTML_TEMPLATE = r"""
         const content = document.getElementById('content');
         content.innerHTML = '<div class="loading">جاري البحث...</div>';
         
-        if (currentBook === 'quran') {
+        if (currentBook === 'quran' || !currentBook) {
             try {
                 const res = await fetch(`/api/search_advanced?query=${encodeURIComponent(query)}&type=${type}&quran=1`);
                 const data = await res.json();
@@ -978,38 +978,38 @@ HTML_TEMPLATE = r"""
             }
         }
         
-        if (!currentBook) { currentBook = 'bukhari'; setActiveBook('bukhari'); }
-        
-        try {
-            const res = await fetch(`/api/search?book=${currentBook}&query=${encodeURIComponent(query)}&type=${type}`);
-            if (!res.ok) throw new Error('فشل الاتصال');
-            const data = await res.json();
-            
-            if (!Array.isArray(data) || data.length === 0) {
-                content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${escapeHtml(query)}" في ${getBookName(currentBook)}</div>`;
-                return;
-            }
-            
-            let html = `<div class="hadith-card">
-                <div class="hadith-header">
-                    <span class="hadith-book-name">🔍 نتائج البحث في ${getBookName(currentBook)}</span>
-                    <span class="hadith-number">${data.length} نتيجة</span>
-                </div>
-                <div class="search-results">`;
-            data.forEach(item => {
-                const preview = item.text.length > 250 ? item.text.substring(0, 250) + '...' : item.text;
-                html += `<div class="search-result-item" onclick="showHadith(${item.index})">
-                    <div class="res-num">📌 حديث رقم ${item.id}
-                        <span class="res-abjad-badge">جُمّل: ${item.abjad || 0}</span>
+        if (currentBook && currentBook !== 'quran') {
+            try {
+                const res = await fetch(`/api/search?book=${currentBook}&query=${encodeURIComponent(query)}&type=${type}`);
+                if (!res.ok) throw new Error('فشل الاتصال');
+                const data = await res.json();
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                    content.innerHTML = `<div class="hadith-card" style="text-align:center;">لا توجد نتائج لـ "${escapeHtml(query)}" في ${getBookName(currentBook)}</div>`;
+                    return;
+                }
+                
+                let html = `<div class="hadith-card">
+                    <div class="hadith-header">
+                        <span class="hadith-book-name">🔍 نتائج البحث في ${getBookName(currentBook)}</span>
+                        <span class="hadith-number">${data.length} نتيجة</span>
                     </div>
-                    ${item.narrator ? `<div style="color:#b8860b;font-size:13px;margin:5px 0;">🎙️ ${escapeHtml(item.narrator)}</div>` : ''}
-                    <div class="res-text">${safeHighlight(preview, query)}</div>
-                </div>`;
-            });
-            html += '</div></div>';
-            content.innerHTML = html;
-        } catch(e) {
-            content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ في البحث</div>';
+                    <div class="search-results">`;
+                data.forEach(item => {
+                    const preview = item.text.length > 250 ? item.text.substring(0, 250) + '...' : item.text;
+                    html += `<div class="search-result-item" onclick="showHadith(${item.index})">
+                        <div class="res-num">📌 حديث رقم ${item.id}
+                            <span class="res-abjad-badge">جُمّل: ${item.abjad || 0}</span>
+                        </div>
+                        ${item.narrator ? `<div style="color:#b8860b;font-size:13px;margin:5px 0;">🎙️ ${escapeHtml(item.narrator)}</div>` : ''}
+                        <div class="res-text">${safeHighlight(preview, query)}</div>
+                    </div>`;
+                });
+                html += '</div></div>';
+                content.innerHTML = html;
+            } catch(e) {
+                content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ في البحث</div>';
+            }
         }
     }
 
