@@ -6,18 +6,12 @@ from pathlib import Path
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
-
-# تحديد المسار الأساسي لضمان قراءة الملفات
 BASE_DIR = Path(__file__).resolve().parent
 SYNC_FILE = BASE_DIR / 'user_sync.json'
 
-# ==================== 1. تحميل البيانات (يدعم كل المسارات) ====================
+# ==================== 1. تحميل البيانات ====================
 def load_json_from_anywhere(filepath):
-    possible_paths = [
-        BASE_DIR / filepath,
-        BASE_DIR / 'data' / filepath,
-        BASE_DIR / 'static' / filepath
-    ]
+    possible_paths = [BASE_DIR / filepath, BASE_DIR / 'data' / filepath, BASE_DIR / 'static' / filepath]
     for path in possible_paths:
         if path.is_file():
             try:
@@ -376,7 +370,7 @@ HTML_TEMPLATE = r"""
     <div class="top-actions">
         <button class="top-btn" onclick="toggleDark()">🌙 ليلي</button>
         <button class="top-btn" onclick="detectLocation()">📍 تحديد الموقع</button>
-        <button class="top-btn" onclick="toggleBookmark()">🔖 علامة</button>
+        <button class="top-btn" onclick="showBookmarks()">🔖 علاماتي</button>
         <button class="top-btn" onclick="showAbjad()">🔢 حساب الجُمّل</button>
         <button class="top-btn" onclick="showSync()">🔄 مزامنة</button>
         <button class="top-btn" onclick="showAbout()">ℹ️ حول التطبيق</button>
@@ -494,10 +488,15 @@ HTML_TEMPLATE = r"""
         <input type="text" id="syncCode" class="adv-search-input" readonly style="text-align:center; font-size:20px; font-weight:bold;">
         <button class="adv-search-btn" onclick="copySyncCode()">📋 نسخ الرمز</button>
         <button class="adv-search-btn" style="margin-top:10px; background:#2d6a4f;" onclick="applySyncCode()">🔗 تطبيق رمز مزامنة</button>
-        <div style="margin-top:15px; font-size:14px; color:#555;">
-            <p>🔹 يتم حفظ العلامات في قاعدة بياناتنا تلقائياً.</p>
-            <p>🔹 استخدم نفس الرمز على جهازك الآخر لتظهر علاماتك.</p>
-        </div>
+    </div>
+</div>
+
+<!-- نافذة العلامات -->
+<div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="hideBookmarks()">✕</button>
+        <h2>🔖 العلامات المحفوظة</h2>
+        <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;"></div>
     </div>
 </div>
 
@@ -568,7 +567,6 @@ HTML_TEMPLATE = r"""
         } catch(e) { console.error(e); }
     }
 
-    // تحميل العلامات عند بدء التشغيل
     window.addEventListener('load', () => { loadBookmarks(); });
 
     function showSync() {
@@ -589,6 +587,7 @@ HTML_TEMPLATE = r"""
             localStorage.setItem('islamic_userId', userId);
             await loadBookmarks();
             alert('✅ تمت المزامنة بنجاح!');
+            showBookmarks();
         }
     }
 
@@ -605,7 +604,36 @@ HTML_TEMPLATE = r"""
             alert('✅ تمت إضافة العلامة');
         }
         saveBookmarks();
+        updateBookmarkButton();
     }
+
+    function updateBookmarkButton() {
+        const btn = document.querySelector('.copy-btn[onclick="toggleBookmark()"]');
+        if (!btn || !currentBook) return;
+        const key = currentBook + '_' + currentIndex;
+        const exists = bookmarks.find(b => b.key === key);
+        btn.innerText = exists ? '🔖 إزالة العلامة' : '🔖 علامة';
+    }
+
+    function showBookmarks() {
+        document.getElementById('bookmarksModal').classList.add('show');
+        const list = document.getElementById('bookmarksList');
+        if (bookmarks.length === 0) {
+            list.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">لا توجد علامات محفوظة.</div>';
+            return;
+        }
+        let html = '';
+        bookmarks.forEach(b => {
+            html += `<div style="padding:10px; border-bottom:1px solid #eee; cursor:pointer;" onclick="hideBookmarks(); ${b.book === 'quran' ? `showSurah(${b.index}).then(()=>scrollToAyah(${b.index}))` : `currentBook='${b.book}'; setActiveBook('${b.book}'); showHadith(${b.index})`}">
+                <div style="color:var(--main-green); font-weight:bold; font-size:14px;">
+                    ${b.book === 'quran' ? '📖 القرآن - آية ' + b.index : getBookName(b.book) + ' - حديث ' + b.index}
+                </div>
+                <div style="color:#888; font-size:12px;">${new Date(b.time).toLocaleString('ar-SA')}</div>
+            </div>`;
+        });
+        list.innerHTML = html;
+    }
+    function hideBookmarks() { document.getElementById('bookmarksModal').classList.remove('show'); }
 
     // ==================== القرآن ====================
     const ALL_SURAHS = {{ surahs|tojson }};
@@ -614,7 +642,6 @@ HTML_TEMPLATE = r"""
     const HIJRI_MONTHS = ['محرّم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوّال', 'ذو القعدة', 'ذو الحجة'];
     const ABJAD_MAP = {'ا':1,'أ':1,'إ':1,'آ':1,'ء':1,'ؤ':1,'ئ':1,'ب':2,'ج':3,'د':4,'ه':5,'ة':5,'و':6,'ز':7,'ح':8,'ط':9,'ي':10,'ى':10,'ك':20,'ل':30,'م':40,'ن':50,'س':60,'ع':70,'ف':80,'ص':90,'ق':100,'ر':200,'ش':300,'ت':400,'ث':500,'خ':600,'ذ':700,'ض':800,'ظ':900,'غ':1000};
 
-    // ==================== الوقت والتاريخ ====================
     function toHijri(date) {
         let day = date.getDate(); let month = date.getMonth() + 1; let year = date.getFullYear();
         let m = month; let y = year; let d = day;
@@ -649,7 +676,6 @@ HTML_TEMPLATE = r"""
     }
     setInterval(updateTime, 1000); updateTime();
 
-    // ==================== الموقع ومواقيت الصلاة ====================
     function detectLocation() {
         const locEl = document.getElementById('locationInfo');
         if (!navigator.geolocation) { locEl.innerText = '⚠️ المتصفح لا يدعم تحديد الموقع - استخدام مكة'; fetchPrayerTimesByCoords(21.4225, 39.8262); return; }
@@ -690,17 +716,14 @@ HTML_TEMPLATE = r"""
     }
     window.addEventListener('load', () => { setTimeout(detectLocation, 500); });
 
-    // ==================== الخط والوضع الليلي ====================
     function changeFontSize(delta) { fontSize = Math.max(16, Math.min(48, fontSize + delta)); document.getElementById('fontSizeDisplay').innerText = fontSize; document.querySelectorAll('.hadith-text, .ayah-line').forEach(el => el.style.fontSize = fontSize + 'px'); }
     function resetFontSize() { fontSize = 24; document.getElementById('fontSizeDisplay').innerText = fontSize; document.querySelectorAll('.hadith-text, .ayah-line').forEach(el => el.style.fontSize = fontSize + 'px'); }
     function toggleDark() { document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode', document.body.classList.contains('dark-mode')); }
     if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark-mode');
 
-    // ==================== حول التطبيق ====================
     function showAbout() { document.getElementById('aboutModal').classList.add('show'); }
     function hideAbout() { document.getElementById('aboutModal').classList.remove('show'); }
 
-    // ==================== حساب الجُمّل ====================
     function showAbjad() { document.getElementById('abjadModal').classList.add('show'); const inp = document.getElementById('abjadInput'); if (currentSearchQuery) inp.value = currentSearchQuery; inp.focus(); }
     function hideAbjad() { document.getElementById('abjadModal').classList.remove('show'); }
     async function calcAbjad() {
@@ -718,7 +741,6 @@ HTML_TEMPLATE = r"""
         } catch(e) { resEl.innerHTML = '<div style="color:red;text-align:center;">حدث خطأ</div>'; }
     }
 
-    // ==================== البحث المتقدم ====================
     function showAdvancedSearch() { document.getElementById('advSearchModal').classList.add('show'); document.getElementById('advSearchType').value = document.getElementById('searchType').value; }
     function hideAdvancedSearch() { document.getElementById('advSearchModal').classList.remove('show'); }
     function selectAllBooks() { document.querySelectorAll('.book-chk').forEach(chk => chk.checked = true); document.getElementById('chk_quran').checked = true; }
@@ -762,7 +784,6 @@ HTML_TEMPLATE = r"""
         } catch(e) { content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ في البحث</div>'; }
     }
 
-    // ==================== الكتب ====================
     function setActiveBook(bookId) {
         document.querySelectorAll('.book-btn').forEach(b => b.classList.remove('active'));
         if (bookId === 'quran') { const qb = document.getElementById('quranBtn'); if (qb) qb.classList.add('active'); }
@@ -805,7 +826,6 @@ HTML_TEMPLATE = r"""
         } catch(e) { content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ</div>'; }
     }
 
-    // ==================== القرآن ====================
     async function selectQuran() { currentBook = 'quran'; setActiveBook('quran'); await showSurah(1); }
 
     async function showSurah(surahNum) {
@@ -857,7 +877,6 @@ HTML_TEMPLATE = r"""
     function copyAyah(n) { const el = document.getElementById('ayah-' + n); if (!el) return; const text = el.querySelector('span').innerText; navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ الآية')); }
     function copySurah() { const c = document.querySelector('.surah-container'); if (!c) return; let text = c.querySelector('h2').innerText + '\n\n'; c.querySelectorAll('.ayah-line').forEach(l => { text += l.querySelector('span').innerText + ' (' + l.dataset.ayah + ')\n'; }); navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة')); }
 
-    // ==================== البحث العادي ====================
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim(); const type = document.getElementById('searchType').value;
         if (!query) { alert('اكتب كلمة أو رقم للبحث'); return; }
@@ -878,7 +897,6 @@ HTML_TEMPLATE = r"""
         } catch(e) { content.innerHTML = '<div class="hadith-card" style="text-align:center;color:red;">حدث خطأ في البحث</div>'; }
     }
 
-    // ==================== أدوات ====================
     function getBookName(bookId) {
         const names = {'quran': 'القرآن الكريم', {% for key, value in books.items() %}'{{ key }}': '{{ value }}',{% endfor %}};
         return names[bookId] || bookId;
