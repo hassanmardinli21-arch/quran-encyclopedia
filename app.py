@@ -931,7 +931,7 @@ HTML_TEMPLATE = r"""
     function copyAyah(n) { const el = document.getElementById('ayah-' + n); if (!el) return; const text = el.querySelector('span').innerText; navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ الآية')); }
     function copySurah() { const c = document.querySelector('.surah-container'); if (!c) return; let text = c.querySelector('h2').innerText + '\n\n'; c.querySelectorAll('.ayah-line').forEach(l => { text += l.querySelector('span').innerText + ' (' + l.dataset.ayah + ')\n'; }); navigator.clipboard.writeText(text).then(() => alert('✅ تم نسخ السورة')); }
 
-    // ==================== البحث العادي (معدل ليعمل في القرآن والكتب) ====================
+    // ==================== البحث العادي ====================
     async function doSearch() {
         const query = document.getElementById('searchInput').value.trim();
         const type = document.getElementById('searchType').value;
@@ -943,7 +943,6 @@ HTML_TEMPLATE = r"""
         const content = document.getElementById('content');
         content.innerHTML = '<div class="loading">جاري البحث...</div>';
         
-        // إذا كان المستخدم في وضع القرآن، نبحث في القرآن
         if (currentBook === 'quran') {
             try {
                 const res = await fetch(`/api/search_advanced?query=${encodeURIComponent(query)}&type=${type}&quran=1`);
@@ -979,7 +978,6 @@ HTML_TEMPLATE = r"""
             }
         }
         
-        // البحث في الكتب
         if (!currentBook) { currentBook = 'bukhari'; setActiveBook('bukhari'); }
         
         try {
