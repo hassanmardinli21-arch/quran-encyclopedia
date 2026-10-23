@@ -58,7 +58,7 @@ def normalize_arabic(text):
     if not text: return ''
     text = strip_diacritics(text)
     text = text.replace('ـ', '')
-    text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('إ', 'ا')
+    text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
     text = text.replace('ة', 'ه').replace('ى', 'ي')
     text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
     return text
@@ -95,7 +95,7 @@ BOOKS = {
     'malik':'موطأ مالك',
     'ahmed':'مسند أحمد',
     'darimi':'سنن الدارمي',
-    'riyad_assalihin':'رياض الصالحين',
+    'riyad_assalihin':'رياض الصالصين',
     'aladab_almufrad':'الأدب المفرد',
     'bulugh_almaram':'بلوغ المرام',
     'mishkat_almasabih':'مشكاة المصابيح',
@@ -138,15 +138,16 @@ def save_sync_data(data):
 @app.route('/api/sync', methods=['GET', 'POST'])
 def sync():
     if request.method == 'POST':
-        data = request.json
+        data = request.json or {}
         user_id = data.get('userId')
         if not user_id: return jsonify({'error': 'No ID'}), 400
         sync_data = get_sync_data()
         sync_data[user_id] = data.get('bookmarks', [])
         save_sync_data(sync_data)
-        return jsonify({'status': 'ok'})
+        return jsonify({'status': 'ok', 'bookmarks': sync_data[user_id]})
     else:
         user_id = request.args.get('userId')
+        if not user_id: return jsonify({'error': 'No ID'}), 400
         sync_data = get_sync_data()
         return jsonify({'bookmarks': sync_data.get(user_id, [])})
 
@@ -270,6 +271,7 @@ HTML_TEMPLATE = r"""
         .top-btn.adv { background: #27ae60; }
         .top-btn.adv:hover { background: #219653; }
         .top-btn.sync-btn { background: #c29b38; }
+        .top-btn.sync-btn:hover { background: #d4a73b; }
         
         .info-bar { background: #2d6a4f; color: white; padding: 12px 20px; border-bottom: 2px solid var(--gold); text-align: center; }
         .info-time { font-size: 28px; font-weight: bold; color: var(--gold); margin-bottom: 5px; font-family: 'Segoe UI', sans-serif; }
@@ -351,6 +353,12 @@ HTML_TEMPLATE = r"""
         .modal-close { position: absolute; top: 15px; left: 15px; background: #c0392b; color: white; border: none; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; font-size: 20px; font-weight: bold; }
         .modal-content h2 { text-align: center; color: var(--main-green); font-size: 24px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--gold); }
         
+        .sync-box { background: #fdfaf3; border: 2px solid var(--gold); padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        .sync-input-group { display: flex; gap: 8px; margin-top: 10px; justify-content: center; flex-wrap: wrap; }
+        .sync-input-group input { flex: 1; min-width: 200px; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; text-align: center; font-family: inherit; font-size: 14px; }
+        .sync-btn-action { background: var(--main-green); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-weight: bold; font-size: 14px; }
+        .sync-btn-action:hover { background: #2d6a4f; }
+
         body.dark-mode { --bg: #1a1a1a; --text-dark: #e0e0e0; }
         body.dark-mode .hadith-card, body.dark-mode .modal-content, body.dark-mode .search-results { background: #2a2a2a; border-color: #444; color: #e0e0e0; }
         body.dark-mode .hadith-text { background: #333; color: #e0e0e0; }
@@ -358,6 +366,7 @@ HTML_TEMPLATE = r"""
         body.dark-mode .ayah-line { color: #e0e0e0; }
         body.dark-mode .ayah-line:hover { background: #2f2f2f; }
         body.dark-mode .search-result-item:hover { background: #333; }
+        body.dark-mode .sync-box { background: #333; border-color: var(--gold); }
     </style>
 </head>
 <body>
@@ -446,13 +455,24 @@ HTML_TEMPLATE = r"""
     </div>
 </div>
 
-<!-- نافذة العلامات والمزامنة -->
+<!-- نافذة العلامات والمزامنة المكتملة -->
 <div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
     <div class="modal-content">
         <button class="modal-close" onclick="hideBookmarks()">✕</button>
         <h2>🔖 العلامات المحفوظة والمزامنة</h2>
-        <p style="font-size:13px; color:#666; margin-bottom:15px; text-align:center;">معرف المستخدم للمزامنة: <code id="userIdDisplay" style="background:#eee; padding:2px 6px; border-radius:4px;"></code></p>
-        <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;"></div>
+        
+        <div class="sync-box">
+            <strong style="color:var(--main-green);">⚡ رمز المزامنة الخاص بك:</strong>
+            <p style="font-size:12px; color:#666; margin:4px 0;">انسخ هذا الرمز لاسترجاع حفظك على أي جهاز آخر، أو أدخل رمزك السابق للمزامنة:</p>
+            <div class="sync-input-group">
+                <input type="text" id="syncCodeInput" placeholder="أدخل رمز المزامنة...">
+                <button class="sync-btn-action" onclick="applySyncCode()">مزامنة وتطبيق 🔄</button>
+                <button class="sync-btn-action" style="background:var(--gold);" onclick="copySyncCode()">نسخ الرمز 📋</button>
+            </div>
+        </div>
+
+        <h3 style="color:var(--main-green); margin-bottom:10px; font-size:18px;">المحفوظات الحالية:</h3>
+        <div id="bookmarksList" style="max-height: 350px; overflow-y: auto;"></div>
     </div>
 </div>
 
@@ -875,6 +895,7 @@ function highlightQuery(text, query) {
     return text.replace(reg, '<mark>$1</mark>');
 }
 
+// ==================== ميزات المزامنة والعلامات بالكامل ====================
 function addBookmark(type, title, key) {
     let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
     if (!bookmarks.some(b => b.key === key)) {
@@ -888,11 +909,18 @@ function addBookmark(type, title, key) {
 }
 
 function showBookmarks() {
-    document.getElementById('userIdDisplay').textContent = userSyncId;
+    document.getElementById('syncCodeInput').value = userSyncId;
+    renderBookmarksList();
+    document.getElementById('bookmarksModal').classList.add('show');
+}
+
+function hideBookmarks() { document.getElementById('bookmarksModal').classList.remove('show'); }
+
+function renderBookmarksList() {
     let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
     const list = document.getElementById('bookmarksList');
     if (bookmarks.length === 0) {
-        list.innerHTML = '<p style="text-align:center; padding:20px;">لا توجد علامات محفوظة حالياً.</p>';
+        list.innerHTML = '<p style="text-align:center; padding:20px; color:#777;">لا توجد علامات محفوظة حالياً.</p>';
     } else {
         list.innerHTML = bookmarks.map(b => `
             <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
@@ -904,17 +932,14 @@ function showBookmarks() {
             </div>
         `).join('');
     }
-    document.getElementById('bookmarksModal').classList.add('show');
 }
-
-function hideBookmarks() { document.getElementById('bookmarksModal').classList.remove('show'); }
 
 function removeBookmark(key) {
     let bookmarks = JSON.parse(localStorage.getItem('userBookmarks') || '[]');
     bookmarks = bookmarks.filter(b => b.key !== key);
     localStorage.setItem('userBookmarks', JSON.stringify(bookmarks));
     syncBookmarksServer(bookmarks);
-    showBookmarks();
+    renderBookmarksList();
 }
 
 function jumpToBookmark(key) {
@@ -936,6 +961,35 @@ function jumpToBookmark(key) {
                 if (!data.error) loadHadith(bookId, data.index);
             });
     }
+}
+
+function copySyncCode() {
+    const code = document.getElementById('syncCodeInput').value;
+    navigator.clipboard.writeText(code).then(() => alert('تم نسخ رمز المزامنة بنجاح! 📋'));
+}
+
+function applySyncCode() {
+    const newCode = document.getElementById('syncCodeInput').value.trim();
+    if (!newCode) {
+        alert('الرجاء إدخال رمز مزامنة صحيح.');
+        return;
+    }
+    userSyncId = newCode;
+    localStorage.setItem('userSyncId', userSyncId);
+    
+    // جلب المحفوظات من السيرفر فوراً باستخدام الكود الجديد
+    fetch(`/api/sync?userId=${encodeURIComponent(userSyncId)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.bookmarks) {
+                localStorage.setItem('userBookmarks', JSON.stringify(data.bookmarks));
+                renderBookmarksList();
+                alert('تمت المزامنة وجلب العلامات بنجاح! 🔄');
+            } else {
+                alert('تم تطبيق رمز المزامنة ولكن لا توجد بيانات مسجلة به سابقاً.');
+            }
+        })
+        .catch(err => alert('حدث خطأ أثناء المزامنة مع السيرفر.'));
 }
 
 function syncBookmarksServer(bookmarks) {
