@@ -133,6 +133,16 @@ def get_hadith():
     h = hadiths[index]
     return jsonify({'index': index, 'total': len(hadiths), 'id': h.get('idInBook'), 'text': h.get('arabic'), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic'))})
 
+@app.route('/api/hadith_by_id')
+def get_hadith_by_id():
+    book_id = request.args.get('book', 'bukhari')
+    hadith_id = request.args.get('id', 0, type=int)
+    hadiths = load_hadith_book(book_id)
+    for i, h in enumerate(hadiths):
+        if h.get('idInBook') == hadith_id:
+            return jsonify({'index': i, 'total': len(hadiths), 'id': hadith_id, 'text': h.get('arabic'), 'narrator': h.get('english', {}).get('narrator', ''), 'abjad': abjad_value(h.get('arabic'))})
+    return jsonify({'error': 'الحديث غير موجود'})
+
 @app.route('/api/surah')
 def get_surah():
     surah_num = request.args.get('surah', 1, type=int)
@@ -146,8 +156,6 @@ def search():
     query = request.args.get('query', '').strip()
     search_type = request.args.get('type', 'word')
     if not query: return jsonify([])
-    
-    # البحث في القرآن
     if book_id == 'quran':
         results = []
         for (s, a), text in quran_ayahs_map.items():
@@ -155,8 +163,6 @@ def search():
                 surah_name = next((x['name'] for x in surahs_list if x['id'] == s), '')
                 results.append({'surah': s, 'surah_name': surah_name, 'ayah': a, 'text': text, 'abjad': abjad_value(text)})
         return jsonify(results)
-    
-    # البحث في الكتب
     if book_id not in BOOKS: return jsonify([])
     hadiths = load_hadith_book(book_id)
     results = []
@@ -205,8 +211,6 @@ HTML_TEMPLATE = r"""
         .search-area select { padding: 10px 12px; border-radius: 8px; border: none; font-size: 14px; font-family: inherit; background: white; cursor: pointer; min-width: 170px; }
         .search-area button { background: var(--gold); border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; font-family: inherit; white-space: nowrap; }
         .search-area button:hover { background: #b8935a; }
-        .search-area button.adv-btn { background: #27ae60; }
-        .search-area button.adv-btn:hover { background: #1e8449; }
         
         .text-controls { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px; background: #f5f5f0; border-bottom: 2px solid #ddd; flex-wrap: wrap; }
         .text-controls button { background: var(--main-green); color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; font-family: inherit; }
@@ -286,24 +290,8 @@ HTML_TEMPLATE = r"""
         .modal-content h2 { text-align: center; color: var(--main-green); font-size: 24px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--gold); }
         .adv-search-input { width: 100%; padding: 12px 15px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; }
         .adv-search-input:focus { outline: none; border-color: var(--main-green); }
-        .books-selection { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 15px; max-height: 400px; overflow-y: auto; }
-        .quick-select { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-        .quick-select button { padding: 8px 14px; background: var(--main-green); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: bold; }
-        .quick-select button:hover { background: #40916c; }
-        .book-checkbox { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; background: white; border-radius: 6px; margin-bottom: 4px; }
-        .book-checkbox:hover { background: var(--light-green); }
-        .book-checkbox input { margin-left: 12px; width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; }
-        .book-checkbox label { flex: 1; cursor: pointer; font-size: 16px; font-weight: 500; }
-        .book-checkbox.quran-special { background: #fff9e6; font-weight: bold; border: 2px solid var(--gold); border-radius: 8px; margin-bottom: 8px; }
         .adv-search-btn { width: 100%; padding: 14px; background: var(--gold); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 17px; font-weight: bold; font-family: inherit; }
         .adv-search-btn:hover { background: #b8935a; }
-        
-        .adv-type-select { width: 100%; padding: 12px 15px; font-size: 15px; border-radius: 8px; border: 2px solid #ddd; font-family: inherit; margin-bottom: 15px; background: white; cursor: pointer; }
-        .adv-type-select:focus { outline: none; border-color: var(--main-green); }
-        
-        .adv-results-section { margin-bottom: 25px; }
-        .adv-book-title { background: var(--main-green); color: white; padding: 10px 15px; border-radius: 8px; font-size: 17px; font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; }
-        .adv-book-title .count { background: var(--gold); color: white; padding: 2px 10px; border-radius: 15px; font-size: 13px; }
         
         .abjad-total { text-align: center; background: linear-gradient(135deg, #1a4d2e, #2d6a4f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
         .abjad-total .lbl { font-size: 15px; opacity: 0.9; }
@@ -354,6 +342,7 @@ HTML_TEMPLATE = r"""
     <div class="top-actions">
         <button class="top-btn" onclick="toggleDark()">🌙 ليلي</button>
         <button class="top-btn" onclick="detectLocation()">📍 تحديد الموقع</button>
+        <button class="top-btn" onclick="showBookmarks()">🔖 علاماتي</button>
         <button class="top-btn" onclick="showAbjad()">🔢 حساب الجُمّل</button>
         <button class="top-btn" onclick="showHistory()">📜 سجل البحث</button>
         <button class="top-btn" onclick="showAbout()">ℹ️ حول التطبيق</button>
@@ -433,6 +422,15 @@ HTML_TEMPLATE = r"""
             ي=10، ك=20، ل=30، م=40، ن=50، س=60، ع=70، ف=80، ص=90<br>
             ق=100، ر=200، ش=300، ت=400، ث=500، خ=600، ذ=700، ض=800، ظ=900، غ=1000
         </div>
+    </div>
+</div>
+
+<!-- نافذة العلامات -->
+<div class="modal-overlay" id="bookmarksModal" onclick="if(event.target===this) hideBookmarks()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="hideBookmarks()">✕</button>
+        <h2>🔖 العلامات المحفوظة</h2>
+        <div id="bookmarksList" style="max-height: 400px; overflow-y: auto;"></div>
     </div>
 </div>
 
@@ -590,13 +588,13 @@ HTML_TEMPLATE = r"""
         } catch(e) { return escapeHtml(text); }
     }
     
-    // دوال بسيطة للوضع الليلي والجمل
+    // دوال الواجهة
     function toggleDark() { document.body.classList.toggle('dark-mode'); }
     function showAbjad() { document.getElementById('abjadModal').classList.add('show'); }
     function hideAbjad() { document.getElementById('abjadModal').classList.remove('show'); }
     function showAbout() { document.getElementById('aboutModal').classList.add('show'); }
     function hideAbout() { document.getElementById('aboutModal').classList.remove('show'); }
-    function calcAbjad() { alert('هذه الميزة ستضاف قريباً'); }
+    function calcAbjad() { alert('الميزة قيد التطوير'); }
     function detectLocation() { alert('سيتم تحديد الموقع'); }
     function changeFontSize() { alert('تم'); }
     function resetFontSize() { alert('تم'); }
